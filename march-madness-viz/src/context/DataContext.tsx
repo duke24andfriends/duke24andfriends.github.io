@@ -150,6 +150,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
           const round64Picks = round64Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
           confidence.round64 = (round64Picks / totalBrackets) * 100;
+          confidence.round64_count = round64Picks;
           
           // Round of 32
           const round32Games = Object.entries(bracketData.games)
@@ -157,6 +158,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
           const round32Picks = round32Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
           confidence.round32 = (round32Picks / totalBrackets) * 100;
+          confidence.round32_count = round32Picks;
           
           // Sweet 16
           const sweet16Games = Object.entries(bracketData.games)
@@ -164,6 +166,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
           const sweet16Picks = sweet16Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
           confidence.sweet16 = (sweet16Picks / totalBrackets) * 100;
+          confidence.sweet16_count = sweet16Picks;
           
           // Elite 8
           const elite8Games = Object.entries(bracketData.games)
@@ -171,6 +174,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
           const elite8Picks = elite8Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
           confidence.elite8 = (elite8Picks / totalBrackets) * 100;
+          confidence.elite8_count = elite8Picks;
           
           // Final Four
           const finalFourGames = Object.entries(bracketData.games)
@@ -178,6 +182,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
           const finalFourPicks = finalFourGames.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
           confidence.finalFour = (finalFourPicks / totalBrackets) * 100;
+          confidence.finalFour_count = finalFourPicks;
           
           // Championship
           const championshipGame = bracketData.games['63'];
@@ -185,6 +190,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
             ? Object.values(championshipGame.picks).filter(pick => pick === team).length 
             : 0;
           confidence.championship = (championshipPicks / totalBrackets) * 100;
+          confidence.championship_count = championshipPicks;
           
           return confidence;
         });

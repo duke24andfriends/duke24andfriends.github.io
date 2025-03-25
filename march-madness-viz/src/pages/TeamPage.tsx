@@ -130,8 +130,16 @@ const TeamPage = () => {
       {
         label: validTeamCode,
         data: roundKeys.map(key => {
-          const value = teamData[key as keyof typeof teamData];
-          return typeof value === 'number' ? value : 0;
+          if (showCounts) {
+            // Use the _count version when showing counts
+            const countKey = `${key}_count` as keyof typeof teamData;
+            const countValue = teamData[countKey];
+            return typeof countValue === 'number' ? countValue : 0;
+          } else {
+            // Use percentage as before
+            const value = teamData[key as keyof typeof teamData];
+            return typeof value === 'number' ? value : 0;
+          }
         }),
         backgroundColor: 'rgba(54, 162, 235, 0.2)',
         borderColor: 'rgba(54, 162, 235, 1)',
@@ -193,8 +201,17 @@ const TeamPage = () => {
         label: team,
         data: roundKeys.map(key => {
           if (!teamData) return 0;
-          const value = teamData[key as keyof typeof teamData];
-          return typeof value === 'number' ? value : 0;
+          
+          if (showCounts) {
+            // Use the _count version when showing counts
+            const countKey = `${key}_count` as keyof typeof teamData;
+            const countValue = teamData[countKey];
+            return typeof countValue === 'number' ? countValue : 0;
+          } else {
+            // Use percentage as before
+            const value = teamData[key as keyof typeof teamData];
+            return typeof value === 'number' ? value : 0;
+          }
         }),
         backgroundColor: `hsla(${hue}, 70%, 50%, 0.4)`,
         borderColor: `hsla(${hue}, 70%, 60%, 1)`,
@@ -319,12 +336,12 @@ const TeamPage = () => {
                   <Typography variant="subtitle1">Championship Confidence</Typography>
                   <Typography variant="h4">
                     {showCounts 
-                      ? Math.round((bracketData?.total_brackets || 0) * (championshipValue / 100)) 
+                      ? teamData.championship_count 
                       : championshipValue.toFixed(1) + "%"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {showCounts 
-                      ? Math.round((bracketData?.total_brackets || 0) * (championshipValue / 100)) + " users picked " + validTeamCode + " to win it all"
+                      ? teamData.championship_count + " users picked " + validTeamCode + " to win it all"
                       : championshipValue.toFixed(1) + "% of users picked " + validTeamCode + " to win it all"}
                   </Typography>
                 </Box>
@@ -415,7 +432,7 @@ const TeamPage = () => {
                 tooltip: {
                   callbacks: {
                     label: function(context) {
-                      return `${context.dataset.label}: ${context.raw.toFixed(1)}${showCounts ? '' : '%'}`;
+                      return `${context.dataset.label}: ${showCounts ? Math.round(context.raw) : context.raw.toFixed(1)}${showCounts ? '' : '%'}`;
                     }
                   }
                 }
