@@ -359,7 +359,6 @@ const TeamPage = () => {
                           const gameResult = gameResults.find(g => g.gameId === win.gameId);
                           const opponentSeed = gameResult?.loser === opponent ? gameResult?.loserSeed : 
                                                gameResult?.winner === opponent ? gameResult?.winnerSeed : null;
-                          
                           return (
                             <TableRow key={win.gameId}>
                               <TableCell>

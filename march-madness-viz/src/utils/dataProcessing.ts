@@ -262,28 +262,30 @@ export function parseGameResults(csv: string): {
   const lines = csv.split('\n');
   
   // Extract header row and find column indices
-  const header = lines[0].split(',');
+  const header = lines[0].split(',').map(col => col.trim());
   const gameIdIndex = header.indexOf('Game ID');
   const winnerIndex = header.indexOf('Winner');
   const loserIndex = header.indexOf('Loser');
   const orderIndex = header.indexOf('Order');
   const winnerSeedIndex = header.indexOf('Winner Seed');
   const loserSeedIndex = header.indexOf('Loser Seed');
+
   
   // Parse data rows
   return lines.slice(1)
-    .filter(line => line.trim() !== '')
-    .map(line => {
-      const columns = line.split(',');
-      return {
-        gameId: columns[gameIdIndex],
-        winner: columns[winnerIndex],
-        loser: columns[loserIndex],
-        order: parseInt(columns[orderIndex]),
-        winnerSeed: parseInt(columns[winnerSeedIndex]),
-        loserSeed: parseInt(columns[loserSeedIndex])
-      };
-    });
+  .filter(line => line.trim() !== '')
+  .map(line => {
+    const columns = line.split(',').map(col => col.trim().replace(/\r$/, ''));
+    
+    return {
+      gameId: columns[gameIdIndex],
+      winner: columns[winnerIndex],
+      loser: columns[loserIndex],
+      order: parseInt(columns[orderIndex], 10),
+      winnerSeed: parseInt(columns[winnerSeedIndex], 10),
+      loserSeed: parseInt(columns[loserSeedIndex], 10)
+    };
+  });
 }
 
 // Get opponent for a team in a game
