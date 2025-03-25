@@ -78,11 +78,23 @@ const TeamPage = () => {
   // Ensure valid team code
   const validTeamCode = allTeams.includes(teamCode) ? teamCode : (allTeams[0] || '');
   
-  // Get team confidence data
-  const teamData = useMemo(() => 
-    teamConfidence.find(team => team.team === validTeamCode),
-    [teamConfidence, validTeamCode]
-  );
+  // Get team confidence data - direct approach like the old version
+  const teamData = useMemo(() => {
+    const found = teamConfidence.find(team => team.team === validTeamCode);
+    if (!found) {
+      // Create a default object with zeros if not found
+      return {
+        team: validTeamCode,
+        round64: 0,
+        round32: 0,
+        sweet16: 0,
+        elite8: 0,
+        finalFour: 0,
+        championship: 0
+      };
+    }
+    return found;
+  }, [teamConfidence, validTeamCode]);
   
   // Find team seed
   const teamSeed = useMemo(() => {
@@ -117,7 +129,10 @@ const TeamPage = () => {
     datasets: [
       {
         label: validTeamCode,
-        data: roundKeys.map(key => teamData ? teamData[key as keyof typeof teamData] as number : 0),
+        data: roundKeys.map(key => {
+          const value = teamData[key as keyof typeof teamData];
+          return typeof value === 'number' ? value : 0;
+        }),
         backgroundColor: 'rgba(54, 162, 235, 0.2)',
         borderColor: 'rgba(54, 162, 235, 1)',
         borderWidth: 1,
@@ -158,7 +173,11 @@ const TeamPage = () => {
   const comparisonTeams = useMemo(() => {
     // Get top 5 teams by championship confidence
     return [...teamConfidence]
-      .sort((a, b) => b.championship - a.championship)
+      .sort((a, b) => {
+        const aVal = typeof a.championship === 'number' ? a.championship : 0;
+        const bVal = typeof b.championship === 'number' ? b.championship : 0;
+        return bVal - aVal;
+      })
       .slice(0, 5)
       .map(team => team.team);
   }, [teamConfidence]);
@@ -172,7 +191,11 @@ const TeamPage = () => {
       
       return {
         label: team,
-        data: roundKeys.map(key => teamData ? teamData[key as keyof typeof teamData] as number : 0),
+        data: roundKeys.map(key => {
+          if (!teamData) return 0;
+          const value = teamData[key as keyof typeof teamData];
+          return typeof value === 'number' ? value : 0;
+        }),
         backgroundColor: `hsla(${hue}, 70%, 50%, 0.4)`,
         borderColor: `hsla(${hue}, 70%, 60%, 1)`,
         borderWidth: isCurrentTeam ? 2 : 1,
@@ -180,7 +203,7 @@ const TeamPage = () => {
     }),
   };
   
-  // Helper to find round name from game ID
+  // Helper to find round name from game ID - same as in old version
   function getRoundFromGameId(gameId: string): string {
     const id = parseInt(gameId);
     if (id >= 1 && id <= 32) return 'Round of 64';
@@ -200,7 +223,7 @@ const TeamPage = () => {
     );
   }
 
-  if (error || !teamData) {
+  if (error) {
     return (
       <Box sx={{ textAlign: 'center', py: 5, px: 3 }}>
         <Typography variant="h2" color="error" gutterBottom>
@@ -212,6 +235,9 @@ const TeamPage = () => {
       </Box>
     );
   }
+  
+  // Safely get championship value with fallback to 0
+  const championshipValue = typeof teamData.championship === 'number' ? teamData.championship : 0;
   
   return (
     <Box>
@@ -293,13 +319,13 @@ const TeamPage = () => {
                   <Typography variant="subtitle1">Championship Confidence</Typography>
                   <Typography variant="h4">
                     {showCounts 
-                      ? Math.round(bracketData?.total_brackets * (teamData.championship / 100)) 
-                      : teamData.championship.toFixed(1) + "%"}
+                      ? Math.round((bracketData?.total_brackets || 0) * (championshipValue / 100)) 
+                      : championshipValue.toFixed(1) + "%"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {showCounts 
-                      ? Math.round(bracketData?.total_brackets * (teamData.championship / 100)) + " users picked " + validTeamCode + " to win it all"
-                      : teamData.championship.toFixed(1) + "% of users picked " + validTeamCode + " to win it all"}
+                      ? Math.round((bracketData?.total_brackets || 0) * (championshipValue / 100)) + " users picked " + validTeamCode + " to win it all"
+                      : championshipValue.toFixed(1) + "% of users picked " + validTeamCode + " to win it all"}
                   </Typography>
                 </Box>
                 

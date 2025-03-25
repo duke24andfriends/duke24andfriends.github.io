@@ -165,25 +165,37 @@ const RoundPage = () => {
   // Format data for bar chart
   const chartData = {
     labels: sortedGames.map(game => {
-      const winner = game.winner ? `${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}` : '';
-      const loser = game.loser ? `${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}` : '';
+      const winner = game?.winner ? `${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}` : '';
+      const loser = game?.loser ? `${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}` : '';
       
       if (winner && loser) {
         return `${winner} vs ${loser}`;
       }
-      return `Game ${game.gameId}`;
+      
+      // For games 1, 9, 17, 25 and any others with missing teams, check the gameResults
+      const gameId = game?.gameId;
+      if (gameId) {
+        const gameResult = gameResults.find(r => r.gameId === gameId);
+        if (gameResult?.winner && gameResult?.loser) {
+          const winnerSeed = gameResult.winnerSeed ? ` (#${gameResult.winnerSeed})` : '';
+          const loserSeed = gameResult.loserSeed ? ` (#${gameResult.loserSeed})` : '';
+          return `${gameResult.winner}${winnerSeed} vs ${gameResult.loser}${loserSeed}`;
+        }
+      }
+      
+      return `Game ${game?.gameId}`;
     }),
     datasets: [
       {
         label: 'User Accuracy (%)',
-        data: sortedGames.map(game => game.accuracy),
+        data: sortedGames.map(game => game?.accuracy || 0),
         backgroundColor: sortedGames.map(game => 
-          game.accuracy > avgAccuracy 
+          (game?.accuracy || 0) >= 50 
             ? theme.palette.success.light 
             : theme.palette.error.light
         ),
         borderColor: sortedGames.map(game => 
-          game.accuracy > avgAccuracy 
+          (game?.accuracy || 0) >= 50 
             ? theme.palette.success.main 
             : theme.palette.error.main
         ),

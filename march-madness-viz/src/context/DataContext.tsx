@@ -53,6 +53,10 @@ export const DataProvider = ({ children }: DataProviderProps) => {
         // Fetch bracket data
         const bracketResponse = await fetch('/data/duke24.json');
         const bracketData: BracketData = await bracketResponse.json();
+
+        console.log(bracketData.metadata.total_brackets)
+
+        const totalBrackets = bracketData.metadata.total_brackets;
         
         // Fetch game results with seed information
         const resultsResponse = await fetch('/data/game_results_with_seed.csv');
@@ -140,51 +144,50 @@ export const DataProvider = ({ children }: DataProviderProps) => {
         // to reach each round
         const teamConfidence = Array.from(teams).map(team => {
           const confidence = { team } as { team: string } & Record<string, number>;
-          
           // Round of 64
           const round64Games = Object.entries(bracketData.games)
             .filter(([id]) => parseInt(id) >= 1 && parseInt(id) <= 32);
           const round64Picks = round64Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
-          confidence.round64 = (round64Picks / bracketData.total_brackets) * 100;
+          confidence.round64 = (round64Picks / totalBrackets) * 100;
           
           // Round of 32
           const round32Games = Object.entries(bracketData.games)
             .filter(([id]) => parseInt(id) >= 33 && parseInt(id) <= 48);
           const round32Picks = round32Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
-          confidence.round32 = (round32Picks / bracketData.total_brackets) * 100;
+          confidence.round32 = (round32Picks / totalBrackets) * 100;
           
           // Sweet 16
           const sweet16Games = Object.entries(bracketData.games)
             .filter(([id]) => parseInt(id) >= 49 && parseInt(id) <= 56);
           const sweet16Picks = sweet16Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
-          confidence.sweet16 = (sweet16Picks / bracketData.total_brackets) * 100;
+          confidence.sweet16 = (sweet16Picks / totalBrackets) * 100;
           
           // Elite 8
           const elite8Games = Object.entries(bracketData.games)
             .filter(([id]) => parseInt(id) >= 57 && parseInt(id) <= 60);
           const elite8Picks = elite8Games.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
-          confidence.elite8 = (elite8Picks / bracketData.total_brackets) * 100;
+          confidence.elite8 = (elite8Picks / totalBrackets) * 100;
           
           // Final Four
           const finalFourGames = Object.entries(bracketData.games)
             .filter(([id]) => parseInt(id) >= 61 && parseInt(id) <= 62);
           const finalFourPicks = finalFourGames.reduce((count, [_, game]) => 
             count + Object.values(game.picks).filter(pick => pick === team).length, 0);
-          confidence.finalFour = (finalFourPicks / bracketData.total_brackets) * 100;
+          confidence.finalFour = (finalFourPicks / totalBrackets) * 100;
           
           // Championship
           const championshipGame = bracketData.games['63'];
           const championshipPicks = championshipGame 
             ? Object.values(championshipGame.picks).filter(pick => pick === team).length 
             : 0;
-          confidence.championship = (championshipPicks / bracketData.total_brackets) * 100;
+          confidence.championship = (championshipPicks / totalBrackets) * 100;
           
           return confidence;
-        }).filter(team => team.championship > 0 || team.finalFour > 0);
+        });
         
         // Calculate leaderboard trend using the order property for sorting
         // Sort games by their order (chronological sequence they were played)

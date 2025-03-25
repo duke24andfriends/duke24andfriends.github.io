@@ -181,22 +181,13 @@ const Leaderboard = () => {
   };
   
   const createShareableLink = () => {
-    if (selectedUsers.length === 0) return;
-    
-    const baseUrl = window.location.origin;
-    const queryParams = new URLSearchParams();
-    queryParams.set('users', selectedUsers.join(','));
-    
-    const shareUrl = `${baseUrl}/leaderboard?${queryParams.toString()}`;
+    const baseUrl = window.location.origin + window.location.pathname;
+    const userParams = selectedUsers.length > 0 ? `?users=${selectedUsers.join(',')}` : '';
+    const shareableLink = baseUrl + userParams;
     
     // Copy to clipboard
-    navigator.clipboard.writeText(shareUrl)
-      .then(() => {
-        setAlertOpen(true);
-      })
-      .catch(err => {
-        console.error('Failed to copy URL: ', err);
-      });
+    navigator.clipboard.writeText(shareableLink);
+    setAlertOpen(true);
   };
   
   const handleAlertClose = () => {
@@ -218,6 +209,114 @@ const Leaderboard = () => {
     return filteredUsers;
   }, [filteredUsers, isFilterActive, selectedUsers, userScores]);
   
+  // Extract champion picks and calculate max possible scores
+  const enhancedUserScores = useMemo(() => {
+    if (!bracketData || !bracketData.games || !gameResults) {
+      return currentUsers;
+    }
+
+    // Get championship game data (game ID 63)
+    const championshipGame = bracketData.games["63"];
+    
+    // Map from gameId to round
+    const gameIdToRound = new Map();
+    // Round of 64: games 1-32
+    for (let i = 1; i <= 32; i++) {
+      gameIdToRound.set(i.toString(), "ROUND_64");
+    }
+    // Round of 32: games 33-48
+    for (let i = 33; i <= 48; i++) {
+      gameIdToRound.set(i.toString(), "ROUND_32");
+    }
+    // Sweet 16: games 49-56
+    for (let i = 49; i <= 56; i++) {
+      gameIdToRound.set(i.toString(), "SWEET_16");
+    }
+    // Elite 8: games 57-60
+    for (let i = 57; i <= 60; i++) {
+      gameIdToRound.set(i.toString(), "ELITE_8");
+    }
+    // Final Four: games 61-62
+    for (let i = 61; i <= 62; i++) {
+      gameIdToRound.set(i.toString(), "FINAL_FOUR");
+    }
+    // Championship: game 63
+    gameIdToRound.set("63", "CHAMPIONSHIP");
+    
+    // Get completed games
+    const completedGameIds = new Set(gameResults.map(game => game.gameId));
+    
+    // Get teams still in the tournament
+    const eliminatedTeams = new Set<string>();
+    gameResults.forEach(game => {
+      if (game.loser) {
+        eliminatedTeams.add(game.loser);
+      }
+    });
+    
+    return currentUsers.map(user => {
+      // Extract champion pick
+      let champion = '';
+      if (championshipGame && championshipGame.picks && championshipGame.picks[user.username]) {
+        champion = championshipGame.picks[user.username];
+      }
+      
+      // Calculate round scores
+      const roundScores: Record<string, number> = {
+        ROUND_64: 0,
+        ROUND_32: 0,
+        SWEET_16: 0,
+        ELITE_8: 0,
+        FINAL_FOUR: 0,
+        CHAMPIONSHIP: 0
+      };
+      
+      // Calculate max possible score
+      let maxPossibleScore = user.score;
+      
+      // Go through each game in bracket data
+      Object.entries(bracketData.games).forEach(([gameId, game]) => {
+        const round = gameIdToRound.get(gameId);
+        if (!round) return;
+        
+        const userPick = game.picks[user.username];
+        if (!userPick) return;
+        
+        // If game is completed and user picked correctly, add to round score
+        const gameResult = gameResults.find(g => g.gameId === gameId);
+        if (gameResult && gameResult.winner === userPick) {
+          const pointValue = 
+            round === "ROUND_64" ? 10 :
+            round === "ROUND_32" ? 20 :
+            round === "SWEET_16" ? 40 :
+            round === "ELITE_8" ? 80 :
+            round === "FINAL_FOUR" ? 160 : 320;
+          
+          roundScores[round] += pointValue;
+        }
+        
+        // If game is not completed and user's pick is still in tournament
+        if (!completedGameIds.has(gameId) && !eliminatedTeams.has(userPick)) {
+          const pointValue = 
+            round === "ROUND_64" ? 10 :
+            round === "ROUND_32" ? 20 :
+            round === "SWEET_16" ? 40 :
+            round === "ELITE_8" ? 80 :
+            round === "FINAL_FOUR" ? 160 : 320;
+          
+          maxPossibleScore += pointValue;
+        }
+      });
+      
+      return {
+        ...user,
+        champion,
+        roundScores,
+        maxPossibleScore
+      };
+    });
+  }, [currentUsers, bracketData, gameResults]);
+  
   // Chart data for leaderboard trend
   const orderedGames = useMemo(() => {
     if (!gameResults.length) return [];
@@ -227,7 +326,10 @@ const Leaderboard = () => {
   }, [gameResults]);
   
   const chartData = useMemo(() => {
-    if (!leaderboardTrend.length || !orderedGames.length) return null;
+    if (!leaderboardTrend || leaderboardTrend.length === 0) return null;
+    
+    // Find ordered games
+    const orderedGames = [...gameResults].sort((a, b) => a.order - b.order);
     
     // Map order to gameId for x-axis labeling
     const orderToGameIdMap = new Map(
@@ -246,7 +348,7 @@ const Leaderboard = () => {
       colorMap.set(username, `hsl(${hue}, 70%, 50%)`);
     });
     
-    // Sort trend points by game order
+    // Sort trend data by game order
     const sortedTrend = [...leaderboardTrend].sort((a, b) => {
       // Find the order for each gameId
       const orderA = orderedGames.find(g => g.gameId === a.gameId)?.order || 0;
@@ -261,25 +363,32 @@ const Leaderboard = () => {
         return userScore ? userScore.score : null;
       });
       
+      // Use solid colors with 70% saturation and 50% lightness
+      const color = colorMap.get(username);
+      
       return {
         label: username,
         data: userData,
-        borderColor: colorMap.get(username),
-        backgroundColor: `${colorMap.get(username)}30`,
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
         pointRadius: 4,
+        pointBackgroundColor: color,
+        pointBorderColor: 'white',
+        pointHoverRadius: 6,
         tension: 0.1,
+        fill: false
       };
     });
     
-    // Create x-axis labels using the gameId and teams for each game
+    // Create labels from game results
     const labels = sortedTrend.map(point => {
       const gameId = point.gameId;
       const game = gameResults.find(g => g.gameId === gameId);
       
       if (game) {
-        return `Game ${gameId}: ${game.winner} vs ${game.loser}`;
+        return `${game.winner} vs ${game.loser}`;
       }
-      
       return `Game ${gameId}`;
     });
     
@@ -287,7 +396,7 @@ const Leaderboard = () => {
       labels,
       datasets
     };
-  }, [leaderboardTrend, isFilterActive, selectedUsers, orderedGames, gameResults]);
+  }, [leaderboardTrend, gameResults, selectedUsers, isFilterActive]);
   
   if (loading) {
     return (
@@ -356,11 +465,12 @@ const Leaderboard = () => {
                 
                 <Button
                   variant="outlined"
-                  startIcon={<ContentCopyIcon />}
                   onClick={createShareableLink}
+                  startIcon={<ContentCopyIcon />}
                   disabled={selectedUsers.length === 0}
+                  sx={{ mt: 2 }}
                 >
-                  Share Selection
+                  Create Shareable Group Link
                 </Button>
               </Stack>
             </Grid>
@@ -381,7 +491,7 @@ const Leaderboard = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {currentUsers.map((user, index) => {
+              {enhancedUserScores.map((user, index) => {
                 const isExpanded = expandedUsers.includes(user.username);
                 const rankChip = index === 152 ? 
                   <Chip label="🥴" size="small" color="default" /> : null;
@@ -397,7 +507,21 @@ const Leaderboard = () => {
                       }}
                     >
                       <TableCell>
-                        {index + 1}
+                        {index === 0 ? (
+                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'gold' }}>
+                            🥇 1
+                          </Typography>
+                        ) : index === 1 ? (
+                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'silver' }}>
+                            🥈 2
+                          </Typography>
+                        ) : index === 2 ? (
+                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#CD7F32' }}>
+                            🥉 3
+                          </Typography>
+                        ) : (
+                          index + 1
+                        )}
                         {rankChip}
                       </TableCell>
                       <TableCell>

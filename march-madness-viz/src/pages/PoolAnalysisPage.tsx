@@ -277,82 +277,47 @@ const PoolAnalysisPage = () => {
     });
   }, [bracketData, gameResults, userScores]);
   
-  // Perform k-means clustering on user picks
+  // Perform k-means clustering on user picks for championship game (game 63)
   const userClusters = useMemo(() => {
-    if (!userPickStrategies.length) return [];
+    if (!userPickStrategies.length || !bracketData) return [];
     
-    // Create feature vectors from picks
-    // We'll use a simplified approach for k-means with just two dimensions: chalk and herding
+    // Get all unique championship picks (game 63)
+    const championshipGame = bracketData.games['63'];
+    if (!championshipGame) return [];
     
-    // Simple k-means implementation for our 2D case
-    const maxIterations = 10;
+    const championPicks: Record<string, string[]> = {};
     
-    // Initialize clusters with random centroids
-    const clusters: UserCluster[] = Array(clusterCount).fill(null).map((_, i) => ({
-      id: i + 1, // Sequential IDs
-      users: [],
-      centroid: [
-        Math.random() * 100, // Random chalkScore
-        Math.random() * 100  // Random herdingScore
-      ]
-    }));
+    // Group users by their championship pick
+    Object.entries(championshipGame.picks).forEach(([username, team]) => {
+      if (!championPicks[team]) {
+        championPicks[team] = [];
+      }
+      championPicks[team].push(username);
+    });
     
-    // Perform k-means iterations
-    for (let iter = 0; iter < maxIterations; iter++) {
-      // Reset clusters
-      clusters.forEach(cluster => {
-        cluster.users = [];
-      });
-      
-      // Assign users to clusters
-      userPickStrategies.forEach(user => {
-        const features = [user.chalkScore, user.herdingScore];
+    // Convert to clusters (using sequential IDs)
+    let clusterId = 1;
+    const clusters: UserCluster[] = Object.entries(championPicks)
+      .sort((a, b) => b[1].length - a[1].length) // Sort by popularity
+      .map(([team, users]) => {
+        // Find average chalk and herding score for visualization purposes
+        const usersWithStats = users.map(username => 
+          userPickStrategies.find(u => u.username === username)
+        ).filter(Boolean);
         
-        // Find closest centroid
-        let minDistance = Number.MAX_VALUE;
-        let closestCluster = 0;
+        const avgChalkScore = usersWithStats.reduce((sum, user) => sum + (user?.chalkScore || 0), 0) / usersWithStats.length;
+        const avgHerdingScore = usersWithStats.reduce((sum, user) => sum + (user?.herdingScore || 0), 0) / usersWithStats.length;
         
-        clusters.forEach((cluster, index) => {
-          // Euclidean distance
-          const distance = Math.sqrt(
-            Math.pow(features[0] - cluster.centroid[0], 2) +
-            Math.pow(features[1] - cluster.centroid[1], 2)
-          );
-          
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestCluster = index;
-          }
-        });
-        
-        // Assign to closest cluster
-        clusters[closestCluster].users.push(user.username);
-      });
-      
-      // Update centroids
-      clusters.forEach(cluster => {
-        if (cluster.users.length === 0) return;
-        
-        // Calculate new centroid as average of all users in cluster
-        const sum = [0, 0];
-        
-        cluster.users.forEach(username => {
-          const user = userPickStrategies.find(u => u.username === username);
-          if (user) {
-            sum[0] += user.chalkScore;
-            sum[1] += user.herdingScore;
-          }
-        });
-        
-        cluster.centroid = [
-          sum[0] / cluster.users.length,
-          sum[1] / cluster.users.length
-        ];
-      });
-    }
+        return {
+          id: clusterId++,
+          team,
+          users,
+          centroid: [avgChalkScore, avgHerdingScore]
+        };
+    });
     
     return clusters;
-  }, [userPickStrategies, clusterCount]);
+  }, [userPickStrategies, bracketData, clusterCount]);
   
   // Scatter plot data for user clustering
   const scatterData = useMemo(() => {
@@ -370,15 +335,19 @@ const PoolAnalysisPage = () => {
           x: user?.chalkScore ?? 0,
           y: user?.herdingScore ?? 0,
           username,
-          score: user?.score ?? 0
+          score: user?.score ?? 0,
+          team: cluster.team
         };
       });
       
       return {
-        label: `Cluster ${cluster.id}`,
+        label: `Cluster ${cluster.id}: ${cluster.team} (${cluster.users.length} users)`,
         data: userData,
-        backgroundColor: `hsla(${hue}, 70%, 60%, 0.7)`,
-        borderColor: `hsla(${hue}, 70%, 60%, 1)`,
+        backgroundColor: `hsla(${hue}, 70%, 50%, 0.6)`,
+        borderColor: `hsla(${hue}, 70%, 50%, 1)`,
+        borderWidth: 1,
+        pointRadius: 5,
+        pointHoverRadius: 8,
       };
     });
     
@@ -387,7 +356,7 @@ const PoolAnalysisPage = () => {
     };
   }, [userPickStrategies, userClusters]);
   
-  // Create cluster descriptions
+  // Generate cluster descriptions
   const clusterDescriptions = useMemo(() => {
     if (!userClusters.length) return [];
     
@@ -403,28 +372,23 @@ const PoolAnalysisPage = () => {
       
       let description = "";
       
-      // Characterize the cluster
       if (avgChalkScore > 75) {
-        description += "Strong chalk pickers. ";
-      } else if (avgChalkScore < 40) {
-        description += "Upset pickers. ";
+        description = "These users heavily favor chalk picks (lower seeds).";
+      } else if (avgHerdingScore > 75) {
+        description = "These users tend to follow the crowd with popular picks.";
+      } else if (avgChalkScore < 40 && avgHerdingScore < 40) {
+        description = "These users make contrarian picks, avoiding both chalk and popular teams.";
+      } else {
+        description = "These users have a balanced picking strategy.";
       }
-      
-      if (avgHerdingScore > 75) {
-        description += "Follows the crowd. ";
-      } else if (avgHerdingScore < 40) {
-        description += "Contrarian strategy. ";
-      }
-      
-      description += `Average score: ${avgScore.toFixed(0)}`;
       
       return {
         id: cluster.id,
+        team: cluster.team,
         size: cluster.users.length,
-        avgChalkScore,
-        avgHerdingScore,
-        avgScore,
-        description
+        avgScore: avgScore,
+        description: description,
+        topUsers: users.sort((a, b) => (b?.score || 0) - (a?.score || 0)).slice(0, 5)
       };
     });
   }, [userClusters, userPickStrategies]);
@@ -748,10 +712,10 @@ const PoolAnalysisPage = () => {
                         {cluster.description}
                       </Typography>
                       <Typography variant="body2">
-                        Avg Chalk: {cluster.avgChalkScore.toFixed(1)}%
+                        Avg Chalk: {cluster.avgChalkScore !== undefined ? cluster.avgChalkScore.toFixed(1) : 'N/A'}%
                       </Typography>
                       <Typography variant="body2">
-                        Avg Herding: {cluster.avgHerdingScore.toFixed(1)}%
+                        Avg Herding: {cluster.avgHerdingScore !== undefined ? cluster.avgHerdingScore.toFixed(1) : 'N/A'}%
                       </Typography>
                     </Box>
                   ))}
