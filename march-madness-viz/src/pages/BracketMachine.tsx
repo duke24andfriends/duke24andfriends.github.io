@@ -28,7 +28,8 @@ import {
   TableContainer,
   Paper,
   InputLabel,
-  Tooltip
+  Tooltip,
+  Alert
 } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import {
@@ -48,6 +49,11 @@ import {
 import { GameWinner, GameResult, getRoundNameFromGameId } from '../types';
 import CheckIcon from '@mui/icons-material/Check';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import PeopleIcon from '@mui/icons-material/People';
+import EqualizerIcon from '@mui/icons-material/Equalizer';
+import CasinoIcon from '@mui/icons-material/Casino';
+import PercentIcon from '@mui/icons-material/Percent';
 
 // Register chart components
 ChartJS.register(
@@ -141,24 +147,6 @@ const BracketMachine = () => {
   const [probabilityMode, setProbabilityMode] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const [simulationRun, setSimulationRun] = useState(false);
-  // const [pathsToVictoryUser, setPathsToVictoryUser] = useState<string>('');
-  
-  // Variables for the Paths to Victory tab
-  // const [pathsToVictory, setPathsToVictory] = useState<{
-  //   username: string;
-  //   paths: number;
-  //   pathPercentage: number;
-  //   criticalGames: string[];
-  // }[]>([]);
-  
-  // const [analyzingPaths, setAnalyzingPaths] = useState(false);
-  // const [selectedPathUser, setSelectedPathUser] = useState<string>('');
-  // const [pathDetails, setPathDetails] = useState<{
-  //   gameId: string;
-  //   team1: string;
-  //   team2: string;
-  //   needsWinner: string;
-  // }[]>([]);
   
   // Games that haven't been played yet
   const completedGameIds = useMemo(() => 
@@ -364,16 +352,137 @@ const BracketMachine = () => {
     };
   }, [probabilityMode, probabilityScores, initialUserScores]);
   
+  // Simulates random outcomes based on probabilities
+  const simulateRandomOutcomes = () => {
+    if (!bracketData || !probabilityMode) return;
+    
+    // Get all unplayed games
+    const unplayedGameIds = Object.keys(bracketData.games).filter(
+      gameId => !getActualWinner(gameId)
+    );
+    
+    // Reset existing predictions first to avoid conflicts
+    const newPredictions: GameWinner[] = [];
+    
+    // For each unplayed game, randomly select a winner based on probabilities
+    unplayedGameIds.forEach(gameId => {
+      const teams = getGameTeamsConsistent(gameId);
+      if (teams.length !== 2 || teams.includes("TBD")) return;
+      
+      // Get probabilities for this game, default to 50/50 if not set
+      const probs = gameProbabilities[gameId] || {
+        [teams[0]]: 0.5,
+        [teams[1]]: 0.5
+      };
+      
+      // Generate a random number between 0 and 1
+      const rand = Math.random();
+      
+      // Select winner based on probabilities
+      let winner = teams[0];
+      if (rand > probs[teams[0]]) {
+        winner = teams[1];
+      }
+      
+      // Add to predictions
+      newPredictions.push({ gameId, winner });
+    });
+    
+    // Update predictions all at once
+    setPredictedWinners(newPredictions);
+    setHypotheticalWinners(newPredictions);
+    setSimulationRun(true);
+  };
+  
   // Update predicted winner
   const updatePredictedWinner = (gameId: string, winner: string) => {
+    // Remove existing prediction for this game
     const newPredictions = [...predictedWinners.filter(g => g.gameId !== gameId)];
     
+    // If we're selecting a winner (not just removing), add it to predictions
     if (winner) {
       newPredictions.push({ gameId, winner });
     }
     
+    // Find all games that depend on this game
+    const dependentGames = findDependentGames(gameId);
+    
+    // Remove predictions for dependent games if they contain the removed team
+    // or if they depend on a game whose prediction was just changed
+    if (dependentGames.length > 0) {
+      dependentGames.forEach(depGameId => {
+        const predictionForGame = predictedWinners.find(p => p.gameId === depGameId);
+        if (predictionForGame) {
+          // Get the updated teams for this dependent game based on current predictions
+          const updatedTeams = getGameTeamsConsistent(depGameId);
+          
+          // If the teams don't include the predicted winner, remove the prediction
+          if (!updatedTeams.includes(predictionForGame.winner) && !updatedTeams.includes("TBD")) {
+            const index = newPredictions.findIndex(p => p.gameId === depGameId);
+            if (index !== -1) {
+              newPredictions.splice(index, 1);
+            }
+          }
+        }
+      });
+    }
+    
+    // Update state
     setPredictedWinners(newPredictions);
     setHypotheticalWinners(newPredictions);
+  };
+  
+  // Find all games that depend on a given game
+  const findDependentGames = (gameId: string): string[] => {
+    const dependentGames: string[] = [];
+    
+    // Map from game ID to the two previous games that feed into it
+    const gameToFeederGames: Record<string, string[]> = {
+      // Round of 32
+      "33": ["1", "2"], "34": ["3", "4"], "35": ["5", "6"], "36": ["7", "8"],
+      "37": ["9", "10"], "38": ["11", "12"], "39": ["13", "14"], "40": ["15", "16"],
+      "41": ["17", "18"], "42": ["19", "20"], "43": ["21", "22"], "44": ["23", "24"],
+      "45": ["25", "26"], "46": ["27", "28"], "47": ["29", "30"], "48": ["31", "32"],
+      
+      // Sweet 16
+      "49": ["33", "34"], "50": ["35", "36"], "51": ["37", "38"], "52": ["39", "40"],
+      "53": ["41", "42"], "54": ["43", "44"], "55": ["45", "46"], "56": ["47", "48"],
+      
+      // Elite 8
+      "57": ["49", "50"], "58": ["51", "52"], "59": ["53", "54"], "60": ["55", "56"],
+      
+      // Final Four
+      "61": ["57", "58"], "62": ["59", "60"],
+      
+      // Championship
+      "63": ["61", "62"]
+    };
+    
+    // Create a reverse map to find games that use a given game as input
+    const reverseMap: Record<string, string[]> = {};
+    
+    Object.entries(gameToFeederGames).forEach(([game, feeders]) => {
+      feeders.forEach(feeder => {
+        if (!reverseMap[feeder]) {
+          reverseMap[feeder] = [];
+        }
+        reverseMap[feeder].push(game);
+      });
+    });
+    
+    // Recursively find all dependent games
+    const findDependent = (gId: string) => {
+      if (reverseMap[gId]) {
+        reverseMap[gId].forEach(depGame => {
+          dependentGames.push(depGame);
+          findDependent(depGame);
+        });
+      }
+    };
+    
+    findDependent(gameId);
+    
+    return dependentGames;
   };
   
   // Update game probability
@@ -427,113 +536,6 @@ const BracketMachine = () => {
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
-  
-  // Run simulation based on probabilities
-  const runSimulation = () => {
-    if (!bracketData || !probabilityMode) return;
-    
-    // Create a simulated outcome based on probabilities
-    const simulatedWinners: GameWinner[] = [];
-    
-    Object.entries(gameProbabilities).forEach(([gameId, probs]) => {
-      // Skip games that already have an actual winner
-      if (getActualWinner(gameId)) return;
-      
-      // Get teams for this game
-      const teams = Object.keys(probs);
-      if (teams.length !== 2) return;
-      
-      // Generate a random number between 0 and 1
-      const random = Math.random();
-      
-      // Pick winner based on probability
-      const team1 = teams[0];
-      const team1Prob = probs[team1];
-      const winner = random < team1Prob ? team1 : teams[1];
-      
-      simulatedWinners.push({ gameId, winner });
-    });
-    
-    // Update both predictedWinners and hypotheticalWinners
-    setPredictedWinners(simulatedWinners);
-    setHypotheticalWinners(simulatedWinners);
-    setSimulationRun(true);
-  };
-  
-  // Calculate paths to victory for a user
-  // const calculatePathsToVictory = (username: string): PathToVictory | null => {
-  //   if (!bracketData || !username) return null;
-    
-  //   // Get all incomplete games
-  //   const remainingGames = Object.entries(bracketData.games)
-  //     .filter(([gameId]) => !completedGameIds.has(gameId));
-    
-  //   if (remainingGames.length === 0) return null;
-    
-  //   // Calculate total possible outcomes (2^n where n is number of remaining games)
-  //   const totalPossibleOutcomes = Math.pow(2, remainingGames.length);
-    
-  //   // We need to find outcomes where the user wins
-  //   // For a simple heuristic, identify critical games where user's pick matters most
-  //   const criticalGames: CriticalGame[] = [];
-    
-  //   remainingGames.forEach(([gameId, game]) => {
-  //     const teams = Object.keys(game.stats.pick_distribution);
-  //     if (teams.length !== 2) return;
-      
-  //     const userPick = game.picks[username];
-  //     if (!userPick) return;
-      
-  //     // Calculate how many points this game is worth
-  //     const roundName = getRoundNameFromGameId(gameId);
-  //     const points = roundName === 'ROUND_64' ? 10 :
-  //                   roundName === 'ROUND_32' ? 20 :
-  //                   roundName === 'SWEET_16' ? 40 :
-  //                   roundName === 'ELITE_8' ? 80 :
-  //                   roundName === 'FINAL_FOUR' ? 160 : 320;
-      
-  //     // Calculate popularity of each team
-  //     const team1 = teams[0];
-  //     const team2 = teams[1];
-  //     const team1Pct = game.stats.pick_distribution[team1] / game.stats.total_picks;
-  //     const team2Pct = game.stats.pick_distribution[team2] / game.stats.total_picks;
-      
-  //     // If user picked the less popular team, this is potentially more impactful
-  //     const impact = userPick === team1 ? 
-  //       points * (1 - team1Pct) : 
-  //       points * (1 - team2Pct);
-      
-  //     criticalGames.push({
-  //       gameId,
-  //       teams,
-  //       impact
-  //     });
-  //   });
-    
-  //   // Sort by impact (highest first)
-  //   criticalGames.sort((a, b) => b.impact - a.impact);
-    
-  //   // Estimate how many winning paths (simplified)
-  //   // For each critical game, if user's pick is correct, they gain advantage
-  //   const topUserScore = initialUserScores[0]?.score || 0;
-  //   const userScore = initialUserScores.find(u => u.username === username)?.score || 0;
-  //   const scoreDifference = topUserScore - userScore;
-    
-  //   // Roughly estimate how many paths lead to victory
-  //   // This is a gross simplification but gives a sense of magnitude
-  //   let possiblePaths = totalPossibleOutcomes;
-  //   if (scoreDifference > 0) {
-  //     // Reduce possible paths based on score gap
-  //     const reductionFactor = 1 - (scoreDifference / 1000); // arbitrary scaling
-  //     possiblePaths = Math.max(1, Math.floor(totalPossibleOutcomes * reductionFactor));
-  //   }
-    
-  //   return {
-  //     username,
-  //     possiblePaths,
-  //     criticalGames: criticalGames.slice(0, 5) // Top 5 most impactful games
-  //   };
-  // };
   
   // Get paths to victory data for selected user
   // const pathsToVictoryData = useMemo(() => {
@@ -840,18 +842,33 @@ const BracketMachine = () => {
             {teams.filter(t => t !== "TBD").map((team) => (
               <Box key={team} sx={{ mt: 1 }}>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography variant="caption" sx={{ minWidth: 60 }}>{team}</Typography>
+                  <Typography variant="caption" sx={{ 
+                    minWidth: 60,
+                    maxWidth: 80, 
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {team}
+                  </Typography>
                   <Slider
                     size="small"
-                    value={(gameProbabilities[gameId]?.[team] || 0.5) > 1 ? 1 : (gameProbabilities[gameId]?.[team] || 0.5) < 0 ? 0 : (gameProbabilities[gameId]?.[team] || 0.5)}
+                    value={gameProbabilities[gameId]?.[team] || 0.5}
                     onChange={(_, val) => {
-                      // Limit probability to range 0-1
+                      // Ensure value is between 0 and 1
                       const limitedVal = Math.min(Math.max(val as number, 0), 1);
                       updateGameProbability(gameId, team, limitedVal);
                     }}
                     min={0}
                     max={1}
-                    step={0.01}
+                    step={0.05}
+                    valueLabelDisplay="auto"
+                    valueLabelFormat={(value) => `${Math.round(value * 100)}%`}
+                    marks={[
+                      { value: 0, label: '0%' },
+                      { value: 0.5, label: '50%' },
+                      { value: 1, label: '100%' }
+                    ]}
                   />
                   <Typography variant="caption" sx={{ minWidth: 36 }}>
                     {((gameProbabilities[gameId]?.[team] || 0.5) * 100).toFixed(0)}%
@@ -1103,271 +1120,44 @@ const BracketMachine = () => {
     );
   };
   
-  // Analyze paths to victory
-  // const analyzePathsToVictory = () => {
-  //   if (!bracketData || !initialUserScores.length) return;
+  // Set popular picks to win (based on user pick distribution)
+  const setPopularWinners = () => {
+    if (!bracketData) return;
     
-  //   setAnalyzingPaths(true);
+    // Get unplayed games
+    const unplayedGameIds = Object.keys(bracketData.games).filter(
+      gameId => !getActualWinner(gameId)
+    );
     
-  //   // Get remaining games that haven't been played yet
-  //   const unplayedGames = Object.entries(bracketData.games)
-  //     .filter(([gameId, game]) => !gameWinners.some(w => w.gameId === gameId))
-  //     .map(([gameId, game]) => ({
-  //       gameId,
-  //       teams: Object.keys(game.stats.pick_distribution)
-  //     }))
-  //     .filter(game => game.teams.length > 0);
-    
-  //   if (unplayedGames.length === 0) {
-  //     // All games are played - no more paths
-  //     setPathsToVictory([]);
-  //     setAnalyzingPaths(false);
-  //     return;
-  //   }
-    
-  //   // Function to compute scores for all users given a set of game outcomes
-  //   const computeAllScores = (outcomes: Record<string, string>): Record<string, number> => {
-  //     const scores: Record<string, number> = {};
+    // For each unplayed game, find the most popular pick
+    unplayedGameIds.forEach(gameId => {
+      const game = bracketData.games[gameId];
+      if (!game || !game.stats || !game.stats.pick_distribution) return;
       
-  //     // Initialize with current scores
-  //     initialUserScores.forEach(user => {
-  //       scores[user.username] = user.score;
-  //     });
+      // Get the teams and their pick counts
+      const pickDistribution = game.stats.pick_distribution;
+      const teams = Object.keys(pickDistribution);
       
-  //     // Add points for predicted winners that match outcomes
-  //     Object.entries(outcomes).forEach(([gameId, winner]) => {
-  //       if (!winner) return; // Skip games with no winner
-        
-  //       // Get game data
-  //       const game = bracketData.games[gameId];
-  //       if (!game) return;
-        
-  //       // Get point value for this game
-  //       const roundName = getRoundNameFromGameId(gameId);
-  //       const pointValue = 
-  //         roundName === 'ROUND_64' ? 10 :
-  //         roundName === 'ROUND_32' ? 20 :
-  //         roundName === 'SWEET_16' ? 40 :
-  //         roundName === 'ELITE_8' ? 80 :
-  //         roundName === 'FINAL_FOUR' ? 160 : 320;
-        
-  //       // Award points to users who picked this winner
-  //       Object.entries(game.picks).forEach(([username, pick]) => {
-  //         if (pick === winner) {
-  //           scores[username] = (scores[username] || 0) + pointValue;
-  //         }
-  //       });
-  //     });
+      if (teams.length < 2) return;
       
-  //     return scores;
-  //   };
-    
-  //   // Use current winners as base outcomes
-  //   const baseOutcomes: Record<string, string> = {};
-  //   gameWinners.forEach(game => {
-  //     baseOutcomes[game.gameId] = game.winner;
-  //   });
-    
-  //   // Add predicted winners for simulation
-  //   unplayedGames.forEach(game => {
-  //     const predictedWinner = predictedWinners.find(w => w.gameId === game.gameId)?.winner;
-  //     if (predictedWinner) {
-  //       baseOutcomes[game.gameId] = predictedWinner;
-  //     }
-  //   });
-    
-  //   // If no unplayed games, return current leader
-  //   if (unplayedGames.length === 0) {
-  //     const currentScores = computeAllScores(baseOutcomes);
-  //     const sortedUsers = Object.entries(currentScores)
-  //       .sort((a, b) => b[1] - a[1])
-  //       .map(([username, score]) => username);
+      // Find the team with the most picks
+      let mostPopularTeam = '';
+      let maxPicks = 0;
       
-  //     setPathsToVictory([
-  //       {
-  //         username: sortedUsers[0],
-  //         paths: 1,
-  //         pathPercentage: 100,
-  //         criticalGames: []
-  //       }
-  //     ]);
-  //     setAnalyzingPaths(false);
-  //     return;
-  //   }
-    
-  //   // For reasonable performance, limit analysis to 10 remaining games
-  //   const gamesToAnalyze = unplayedGames.slice(0, 10);
-    
-  //   // Generate all possible combinations of outcomes
-  //   const generateOutcomes = (gameIndex: number, currentOutcomes: Record<string, string>, results: Record<string, number>) => {
-  //     if (gameIndex >= gamesToAnalyze.length) {
-  //       // We've assigned outcomes to all games, compute scores
-  //       const scores = computeAllScores(currentOutcomes);
-        
-  //       // Find the winner (highest score)
-  //       let maxScore = -1;
-  //       let winner = '';
-        
-  //       Object.entries(scores).forEach(([username, score]) => {
-  //         if (score > maxScore) {
-  //           maxScore = score;
-  //           winner = username;
-  //         } else if (score === maxScore && username < winner) {
-  //           winner = username;
-  //         }
-  //       });
-        
-  //       // Count path for this winner
-  //       results[winner] = (results[winner] || 0) + 1;
-  //       return;
-  //     }
+      teams.forEach(team => {
+        const pickCount = pickDistribution[team] || 0;
+        if (pickCount > maxPicks) {
+          maxPicks = pickCount;
+          mostPopularTeam = team;
+        }
+      });
       
-  //     const game = gamesToAnalyze[gameIndex];
-      
-  //     // Try each possible team as the winner
-  //     game.teams.forEach(team => {
-  //       const newOutcomes = { ...currentOutcomes };
-  //       newOutcomes[game.gameId] = team;
-  //       generateOutcomes(gameIndex + 1, newOutcomes, results);
-  //     });
-  //   };
-    
-  //   // Count wins for each user
-  //   const pathResults: Record<string, number> = {};
-  //   generateOutcomes(0, baseOutcomes, pathResults);
-    
-  //   // Calculate total paths
-  //   const totalPaths = Object.values(pathResults).reduce((sum, count) => sum + count, 0);
-    
-  //   // Find critical games for each user
-  //   const findCriticalGames = (username: string) => {
-  //     const criticalGames: string[] = [];
-      
-  //     // For each unplayed game, check if outcome affects user's victory
-  //     gamesToAnalyze.forEach(game => {
-  //       // Try each team as winner and see if it changes victory chances
-  //       const teamOutcomes = game.teams.map(team => {
-  //         const testOutcomes = { ...baseOutcomes, [game.gameId]: team };
-          
-  //         // Test if this user can win with this outcome
-  //         let pathsWithOutcome = 0;
-  //         let totalPathsWithOutcome = 0;
-          
-  //         // Modified generateOutcomes that excludes the current game
-  //         const testPaths = (testGameIndex: number, testCurrentOutcomes: Record<string, string>) => {
-  //           if (testGameIndex >= gamesToAnalyze.length) {
-  //             totalPathsWithOutcome++;
-              
-  //             const scores = computeAllScores(testCurrentOutcomes);
-              
-  //             // Find the winner
-  //             let maxScore = -1;
-  //             let winner = '';
-              
-  //             Object.entries(scores).forEach(([user, score]) => {
-  //               if (score > maxScore) {
-  //                 maxScore = score;
-  //                 winner = user;
-  //               } else if (score === maxScore && user < winner) {
-  //                 winner = user;
-  //               }
-  //             });
-              
-  //             if (winner === username) {
-  //               pathsWithOutcome++;
-  //             }
-              
-  //             return;
-  //           }
-            
-  //           const testGame = gamesToAnalyze[testGameIndex];
-  //           if (testGame.gameId === game.gameId) {
-  //             // Skip the game we're testing - we already set its outcome
-  //             testPaths(testGameIndex + 1, testCurrentOutcomes);
-  //             return;
-  //           }
-            
-  //           // Try each possible outcome for other games
-  //           testGame.teams.forEach(team => {
-  //             const newTestOutcomes = { ...testCurrentOutcomes };
-  //             newTestOutcomes[testGame.gameId] = team;
-  //             testPaths(testGameIndex + 1, newTestOutcomes);
-  //           });
-  //         };
-          
-  //         testPaths(0, testOutcomes);
-          
-  //         return {
-  //           team,
-  //           winPercentage: totalPathsWithOutcome > 0 ? (pathsWithOutcome / totalPathsWithOutcome) * 100 : 0
-  //         };
-  //       });
-        
-  //       // If win percentages differ significantly, this is a critical game
-  //       const percentages = teamOutcomes.map(o => o.winPercentage);
-  //       const maxPercentage = Math.max(...percentages);
-  //       const minPercentage = Math.min(...percentages);
-        
-  //       if (maxPercentage - minPercentage > 20) {
-  //         // This game is critical - has significant impact on chances
-  //         criticalGames.push(game.gameId);
-  //       }
-  //     });
-      
-  //     return criticalGames;
-  //   };
-    
-  //   // Create paths to victory data
-  //   const paths = Object.entries(pathResults)
-  //     .map(([username, count]) => ({
-  //       username,
-  //       paths: count,
-  //       pathPercentage: (count / totalPaths) * 100,
-  //       criticalGames: findCriticalGames(username)
-  //     }))
-  //     .sort((a, b) => b.paths - a.paths);
-    
-  //   setPathsToVictory(paths);
-  //   setAnalyzingPaths(false);
-  // };
-  
-  // // Get detailed path analysis for a specific user
-  // const getPathDetails = (username: string) => {
-  //   if (!bracketData) return;
-    
-  //   setSelectedPathUser(username);
-    
-  //   // Find unplayed games
-  //   const unplayedGames = Object.entries(bracketData.games)
-  //     .filter(([gameId, game]) => !gameWinners.some(w => w.gameId === gameId))
-  //     .map(([gameId, game]) => ({
-  //       gameId,
-  //       teams: Object.keys(game.stats.pick_distribution)
-  //     }))
-  //     .filter(game => game.teams.length >= 2);
-    
-  //   // Find critical games for this user from pathsToVictory
-  //   const userPath = pathsToVictory.find(p => p.username === username);
-  //   const criticalGames = userPath?.criticalGames || [];
-    
-  //   // Generate details for critical games
-  //   const details = unplayedGames
-  //     .filter(game => criticalGames.includes(game.gameId))
-  //     .map(game => {
-  //       // For each critical game, determine which team the user needs to win
-  //       const gameData = bracketData.games[game.gameId];
-  //       const userPick = gameData.picks[username];
-        
-  //       return {
-  //         gameId: game.gameId,
-  //         team1: game.teams[0],
-  //         team2: game.teams.length > 1 ? game.teams[1] : "TBD",
-  //         needsWinner: userPick || "Unknown" // If user picked this game, they need that team to win
-  //       };
-  //     });
-    
-  //   setPathDetails(details);
-  // };
+      if (mostPopularTeam) {
+        // Update the winner for this game
+        updatePredictedWinner(gameId, mostPopularTeam);
+      }
+    });
+  };
   
   if (loading) {
     return (
@@ -1401,7 +1191,7 @@ const BracketMachine = () => {
       </Typography>
       
       <Typography variant="body1" paragraph>
-        Use this tool to experiment with different tournament outcomes and see how they affect the pool standings.
+        Explore different bracket scenarios and see how they affect the leaderboard.
       </Typography>
       
       <Tabs value={tabValue} onChange={handleTabChange}>
@@ -1451,15 +1241,7 @@ const BracketMachine = () => {
               
               <Button 
                 variant="outlined" 
-                onClick={setFavoriteWinners}
-                color="primary"
-              >
-                Set Favorites to Win
-              </Button>
-              
-              <Button 
-                variant="contained" 
-                onClick={runSimulation}
+                onClick={simulateRandomOutcomes}
                 color="primary"
               >
                 Run Simulation
@@ -1470,28 +1252,12 @@ const BracketMachine = () => {
           {!probabilityMode && (
             <Button 
               variant="outlined" 
-              onClick={setFavoriteWinners}
+              onClick={setPopularWinners}
               color="primary"
             >
-              Set Favorites to Win
+              Set Popular Picks
             </Button>
           )}
-          
-          <Tooltip title="Create a shareable link to your current bracket predictions">
-            <Button
-              variant="outlined"
-              onClick={() => {
-                const baseUrl = window.location.origin + window.location.pathname;
-                const predictionsParam = encodeURIComponent(JSON.stringify(predictedWinners));
-                const shareableLink = `${baseUrl}?predictions=${predictionsParam}`;
-                navigator.clipboard.writeText(shareableLink);
-                alert("Link copied to clipboard! Share it to show others your bracket predictions.");
-              }}
-              color="primary"
-            >
-              Share Bracket
-            </Button>
-          </Tooltip>
         </Stack>
         
         {probabilityMode && simulationRun && (
@@ -1535,23 +1301,74 @@ const BracketMachine = () => {
           </Card>
         )}
         
-        {/* Bracket Visualization */}
-        <Box sx={{ mt: 2 }}>
-          {/* Left side: South (Auburn) and West (Florida) */}
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            {renderRegion('SOUTH', regions.SOUTH)}
-            {renderRegion('EAST', regions.EAST)}
+        {/* Bracket Visualization with Sidebar Leaderboard */}
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={8}>
+            {/* Left side: South (Auburn) and West (Florida) */}
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              {renderRegion('SOUTH', regions.SOUTH)}
+              {renderRegion('EAST', regions.EAST)}
+            </Grid>
+            
+            {/* Right side: East (Duke) and Midwest (Houston) */}
+            <Grid container spacing={2}>
+              {renderRegion('WEST', regions.WEST)}
+              {renderRegion('MIDWEST', regions.MIDWEST)}
+            </Grid>
+            
+            {/* Final Four and Championship */}
+            {renderFinalFour()}
           </Grid>
           
-          {/* Right side: East (Duke) and Midwest (Houston) */}
-          <Grid container spacing={2}>
-            {renderRegion('WEST', regions.WEST)}
-            {renderRegion('MIDWEST', regions.MIDWEST)}
+          {/* Leaderboard */}
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2, mb: 2, maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+              <Typography variant="h6" gutterBottom>
+                Projected Leaderboard
+              </Typography>
+              
+              <TableContainer component={Paper} sx={{ maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Rank</TableCell>
+                      <TableCell>User</TableCell>
+                      <TableCell align="right">Score</TableCell>
+                      {probabilityMode && (
+                        <TableCell align="right">Win%</TableCell>
+                      )}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(probabilityMode && probabilityScores.length > 0 ? probabilityScores : initialUserScores)
+                      .slice(0, 25)
+                      .map((user, index) => (
+                        <TableRow key={user.username}>
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell 
+                            sx={{ 
+                              maxWidth: 120, 
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {user.username}
+                          </TableCell>
+                          <TableCell align="right">{user.score || 0}</TableCell>
+                          {probabilityMode && (
+                            <TableCell align="right">
+                              {((user as ProbabilityScore).winProbability || 0).toFixed(1)}%
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
           </Grid>
-          
-          {/* Final Four and Championship */}
-          {renderFinalFour()}
-        </Box>
+        </Grid>
       </TabPanel>
       
       <TabPanel value={tabValue} index={1}>
@@ -1624,21 +1441,6 @@ const BracketMachine = () => {
           </Table>
         </TableContainer>
       </TabPanel>
-      
-      {/* Comment out Paths to Victory tab as requested */}
-      {/* <TabPanel value={tabValue} index={2}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Paths to Victory Analysis
-            </Typography>
-            
-            <Typography variant="body1" paragraph>
-              Coming soon! This feature will calculate all possible remaining tournament outcomes and determine each user's chances of winning.
-            </Typography>
-          </CardContent>
-        </Card>
-      </TabPanel> */}
     </Box>
   );
 };
