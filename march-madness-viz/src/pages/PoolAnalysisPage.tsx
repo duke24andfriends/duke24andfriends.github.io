@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -17,7 +17,6 @@ import {
   Button,
   FormControl,
   InputLabel,
-  Select,
   MenuItem,
   TextField,
   Slider,
@@ -25,9 +24,10 @@ import {
   Paper,
   Link,
   Tooltip,
-  Divider
+  Divider,
+  Autocomplete
 } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Scatter } from 'react-chartjs-2';
 import {
@@ -38,6 +38,7 @@ import {
   Tooltip as ChartTooltip,
   Legend
 } from 'chart.js';
+import UserSimilarityTable, { UserSimilarity } from '../components/UserSimilarityTable';
 
 // Register Chart.js components
 ChartJS.register(
@@ -74,14 +75,6 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-interface UserSimilarity {
-  username: string;
-  similarity: number;
-  weightedSimilarity: number;
-  sharedPoints: number;
-  score: number;
-}
-
 interface UserPickStrategy {
   username: string;
   chalkScore: number;  // Based on seed (lower seed = more chalk)
@@ -106,9 +99,19 @@ const PoolAnalysisPage = () => {
     error 
   } = useData();
   
+  const location = useLocation();
   const [tabValue, setTabValue] = useState(0);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [clusterCount, setClusterCount] = useState<number>(3);
+  
+  // Check for user parameter in URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const userParam = params.get('user');
+    if (userParam && userScores.some(user => user.username === userParam)) {
+      setSelectedUser(userParam);
+    }
+  }, [location.search, userScores]);
   
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -548,19 +551,19 @@ const PoolAnalysisPage = () => {
               <CardHeader title="Find Similar Brackets" />
               <CardContent>
                 <FormControl fullWidth sx={{ mb: 4 }}>
-                  <InputLabel id="user-select-label">Select User</InputLabel>
-                  <Select
-                    labelId="user-select-label"
+                  <Autocomplete
+                    id="user-select"
+                    options={userScores.map(user => user.username)}
                     value={selectedUser}
-                    label="Select User"
-                    onChange={(e) => setSelectedUser(e.target.value as string)}
-                  >
-                    {userScores.slice(0, 50).map(user => (
-                      <MenuItem key={user.username} value={user.username}>
-                        {user.username}
-                      </MenuItem>
-                    ))}
-                  </Select>
+                    onChange={(_, newValue) => setSelectedUser(newValue || '')}
+                    renderInput={(params) => (
+                      <TextField 
+                        {...params} 
+                        label="Search for a User" 
+                        variant="outlined"
+                      />
+                    )}
+                  />
                 </FormControl>
                 
                 <Typography variant="body2" paragraph>
@@ -606,72 +609,12 @@ const PoolAnalysisPage = () => {
                       <Tab label="All Users" />
                     </Tabs>
                     
-                    <Table size="small" sx={{ mt: 2 }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Username</TableCell>
-                          <TableCell 
-                            align="right" 
-                            onClick={() => requestSort('similarity')}
-                            sx={{ 
-                              cursor: 'pointer',
-                              fontWeight: sortConfig.key === 'similarity' ? 'bold' : 'normal',
-                              textDecoration: sortConfig.key === 'similarity' ? 'underline' : 'none'
-                            }}
-                          >
-                            Regular Similarity {sortConfig.key === 'similarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                          </TableCell>
-                          <TableCell 
-                            align="right"
-                            onClick={() => requestSort('weightedSimilarity')}
-                            sx={{ 
-                              cursor: 'pointer',
-                              fontWeight: sortConfig.key === 'weightedSimilarity' ? 'bold' : 'normal',
-                              textDecoration: sortConfig.key === 'weightedSimilarity' ? 'underline' : 'none'
-                            }}
-                          >
-                            Weighted Similarity {sortConfig.key === 'weightedSimilarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                          </TableCell>
-                          <TableCell 
-                            align="right"
-                            onClick={() => requestSort('sharedPoints')}
-                            sx={{ 
-                              cursor: 'pointer',
-                              fontWeight: sortConfig.key === 'sharedPoints' ? 'bold' : 'normal',
-                              textDecoration: sortConfig.key === 'sharedPoints' ? 'underline' : 'none'
-                            }}
-                          >
-                            Shared Points {sortConfig.key === 'sharedPoints' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                          </TableCell>
-                          <TableCell 
-                            align="right"
-                            onClick={() => requestSort('score')}
-                            sx={{ 
-                              cursor: 'pointer',
-                              fontWeight: sortConfig.key === 'score' ? 'bold' : 'normal',
-                              textDecoration: sortConfig.key === 'score' ? 'underline' : 'none'
-                            }}
-                          >
-                            Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                          </TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {sortedSimilarities.slice(0, 15).map(user => (
-                          <TableRow key={user.username}>
-                            <TableCell>
-                              <Link component={RouterLink} to={`/users/${user.username}`}>
-                                {user.username}
-                              </Link>
-                            </TableCell>
-                            <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
-                            <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
-                            <TableCell align="right">{user.sharedPoints}</TableCell>
-                            <TableCell align="right">{user.score}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <UserSimilarityTable 
+                      similarities={userSimilarities}
+                      selectedUser={selectedUser}
+                      limit={15}
+                      showDescription={false}
+                    />
                   </>
                 )}
               </CardContent>

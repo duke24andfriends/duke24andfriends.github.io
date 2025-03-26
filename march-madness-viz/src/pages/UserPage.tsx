@@ -16,7 +16,8 @@ import {
   Stack,
   Divider,
   Button,
-  Paper
+  Paper,
+  Link as RouterLink
 } from '@mui/material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Bar, Pie } from 'react-chartjs-2';
@@ -33,6 +34,7 @@ import {
 import { useData } from '../context/DataContext';
 import { ROUNDS, getRoundNameFromGameId, getPointsForGame } from '../types';
 import { getOpponent } from '../utils/dataProcessing';
+import UserSimilarityTable, { UserSimilarity } from '../components/UserSimilarityTable';
 
 // Register Chart.js components
 ChartJS.register(
@@ -58,7 +60,10 @@ const UserPage = () => {
     gameResults,
     userScores, 
     loading, 
-    error 
+    error,
+    users, 
+    brackets, 
+    teams
   } = useData();
   
   // Find user data
@@ -207,6 +212,279 @@ const UserPage = () => {
     
     return data;
   }, [championPick, bracketData]);
+  
+  // Calculate similar users
+  const userSimilarities = useMemo(() => {
+    if (!bracketData || !username) return [];
+    
+    const userPicks = new Map<string, Set<string>>();
+    const userPicksWithWeights = new Map<string, Map<string, number>>();
+    
+    // Round weights for scoring
+    const roundWeights: Record<string, number> = {
+      'ROUND_64': 10,
+      'ROUND_32': 20,
+      'SWEET_16': 40,
+      'ELITE_8': 80,
+      'FINAL_FOUR': 160,
+      'CHAMPIONSHIP': 320
+    };
+    
+    // Function to get round name from game ID
+    const getRoundNameFromGameId = (gameId: string): string => {
+      const id = parseInt(gameId);
+      if (id >= 1 && id <= 32) return 'ROUND_64';
+      if (id >= 33 && id <= 48) return 'ROUND_32';
+      if (id >= 49 && id <= 56) return 'SWEET_16';
+      if (id >= 57 && id <= 60) return 'ELITE_8';
+      if (id >= 61 && id <= 62) return 'FINAL_FOUR';
+      return 'CHAMPIONSHIP';
+    };
+    
+    // Collect all picks for each user
+    Object.entries(bracketData.games).forEach(([gameId, game]) => {
+      // Get the round weight for this game
+      const roundName = getRoundNameFromGameId(gameId);
+      const weight = roundWeights[roundName];
+      
+      Object.entries(game.picks).forEach(([user, pick]) => {
+        // Regular similarity - just the picks
+        if (!userPicks.has(user)) {
+          userPicks.set(user, new Set());
+        }
+        userPicks.get(user)?.add(`${gameId}:${pick}`);
+        
+        // Weighted similarity - with round weights
+        if (!userPicksWithWeights.has(user)) {
+          userPicksWithWeights.set(user, new Map());
+        }
+        userPicksWithWeights.get(user)?.set(`${gameId}:${pick}`, weight);
+      });
+    });
+    
+    // Calculate Jaccard similarity between current user and all others
+    const selectedUserPicks = userPicks.get(username);
+    const selectedUserWeightedPicks = userPicksWithWeights.get(username);
+    
+    if (!selectedUserPicks || !selectedUserWeightedPicks) return [];
+    
+    const similarities: UserSimilarity[] = [];
+    
+    userPicks.forEach((picks, user) => {
+      if (user === username) return;
+      
+      // Calculate regular similarity (Jaccard index)
+      const intersection = new Set(
+        Array.from(selectedUserPicks).filter(pick => picks.has(pick))
+      );
+      
+      const union = new Set([...selectedUserPicks, ...picks]);
+      
+      // Jaccard similarity: size of intersection / size of union
+      const similarity = intersection.size / union.size;
+      
+      // Calculate weighted similarity
+      const userWeightedPicks = userPicksWithWeights.get(user);
+      if (!userWeightedPicks) return;
+      
+      let weightedIntersectionSum = 0;
+      let weightedUnionSum = 0;
+      let sharedPoints = 0;
+      
+      // Get all unique picks between both users
+      const allPickKeys = new Set([
+        ...Array.from(selectedUserWeightedPicks.keys()),
+        ...Array.from(userWeightedPicks.keys())
+      ]);
+      
+      // Calculate weighted sums
+      allPickKeys.forEach(pickKey => {
+        const selectedUserWeight = selectedUserWeightedPicks.get(pickKey) || 0;
+        const otherUserWeight = userWeightedPicks.get(pickKey) || 0;
+        
+        // For intersection, take the minimum weight (only if both users picked it)
+        if (selectedUserWeight > 0 && otherUserWeight > 0) {
+          weightedIntersectionSum += Math.min(selectedUserWeight, otherUserWeight);
+          
+          // If both users picked the same team for this game, add the points to sharedPoints
+          sharedPoints += selectedUserWeight;
+        }
+        
+        // For union, take the maximum weight
+        weightedUnionSum += Math.max(selectedUserWeight, otherUserWeight);
+      });
+      
+      // Weighted Jaccard similarity
+      const weightedSimilarity = weightedUnionSum > 0 ? 
+        weightedIntersectionSum / weightedUnionSum : 0;
+      
+      const userScore = userScores.find(score => score.username === user)?.score || 0;
+      
+      similarities.push({
+        username: user,
+        similarity,
+        weightedSimilarity,
+        sharedPoints,
+        score: userScore
+      });
+    });
+    
+    return similarities.sort((a, b) => b.weightedSimilarity - a.weightedSimilarity);
+  }, [bracketData, username, userScores]);
+
+  // Calculate user pick strategy metrics
+  const userPickMetrics = useMemo(() => {
+    if (!bracketData || !gameResults || !username) return null;
+    
+    let chalkPicks = 0;
+    let totalPicks = 0;
+    let herdingScore = 0;
+    let deviationScore = 0;
+    
+    // Create a seed map for calculating chalk score
+    const seedMap = new Map<string, number>();
+    gameResults.forEach(result => {
+      seedMap.set(result.winner, result.winnerSeed);
+      seedMap.set(result.loser, result.loserSeed);
+    });
+    
+    // For each game, analyze pick strategies
+    Object.entries(bracketData.games).forEach(([gameId, game]) => {
+      if (!game.picks[username]) return;
+      
+      const teamPicks: Record<string, number> = {};
+      
+      // Count picks for each team
+      Object.values(game.picks).forEach(pick => {
+        teamPicks[pick] = (teamPicks[pick] || 0) + 1;
+      });
+      
+      // Find chalk pick (team with lowest seed) and most popular pick
+      let chalkPick = '';
+      let lowestSeed = Number.MAX_SAFE_INTEGER;
+      
+      let mostPopularPick = '';
+      let maxPicks = 0;
+      
+      // Find both chalk (lowest seed) and popular (most picked) teams
+      Object.keys(teamPicks).forEach(team => {
+        const seed = seedMap.get(team);
+        const pickCount = teamPicks[team];
+        
+        // Update chalk pick (lowest seed)
+        if (seed !== undefined && seed < lowestSeed) {
+          lowestSeed = seed;
+          chalkPick = team;
+        }
+        
+        // Update most popular pick
+        if (pickCount > maxPicks) {
+          maxPicks = pickCount;
+          mostPopularPick = team;
+        }
+      });
+      
+      const userPick = game.picks[username];
+      totalPicks++;
+      
+      // Calculate chalk score (did they pick the lowest seed)
+      if (userPick === chalkPick) {
+        chalkPicks++;
+      }
+      
+      // Calculate herding score (did they pick the most popular team)
+      if (userPick === mostPopularPick) {
+        herdingScore++;
+      } else {
+        // Calculate deviation based on how unpopular the pick was
+        const pickCount = teamPicks[userPick] || 0;
+        const deviation = 1 - (pickCount / maxPicks);
+        deviationScore += deviation;
+      }
+    });
+    
+    const chalkScore = totalPicks > 0 ? (chalkPicks / totalPicks) * 100 : 0;
+    const herdingPercent = totalPicks > 0 ? (herdingScore / totalPicks) * 100 : 0;
+    
+    // Calculate rank for each metric among all users
+    const allUsers = bracketData.users ? Object.keys(bracketData.users) : [];
+    const allMetrics = allUsers.map(user => {
+      let userChalkPicks = 0;
+      let userTotalPicks = 0;
+      let userHerdingScore = 0;
+      let userDeviationScore = 0;
+      
+      Object.entries(bracketData.games).forEach(([gameId, game]) => {
+        if (!game.picks[user]) return;
+        
+        const teamPicks: Record<string, number> = {};
+        Object.values(game.picks).forEach(pick => {
+          teamPicks[pick] = (teamPicks[pick] || 0) + 1;
+        });
+        
+        let chalkPick = '';
+        let lowestSeed = Number.MAX_SAFE_INTEGER;
+        let mostPopularPick = '';
+        let maxPicks = 0;
+        
+        Object.keys(teamPicks).forEach(team => {
+          const seed = seedMap.get(team);
+          const pickCount = teamPicks[team];
+          
+          if (seed !== undefined && seed < lowestSeed) {
+            lowestSeed = seed;
+            chalkPick = team;
+          }
+          
+          if (pickCount > maxPicks) {
+            maxPicks = pickCount;
+            mostPopularPick = team;
+          }
+        });
+        
+        const userPick = game.picks[user];
+        userTotalPicks++;
+        
+        if (userPick === chalkPick) {
+          userChalkPicks++;
+        }
+        
+        if (userPick === mostPopularPick) {
+          userHerdingScore++;
+        } else {
+          const pickCount = teamPicks[userPick] || 0;
+          const deviation = 1 - (pickCount / maxPicks);
+          userDeviationScore += deviation;
+        }
+      });
+      
+      return {
+        username: user,
+        chalkScore: userTotalPicks > 0 ? (userChalkPicks / userTotalPicks) * 100 : 0,
+        herdingScore: userTotalPicks > 0 ? (userHerdingScore / userTotalPicks) * 100 : 0,
+        deviationScore: userDeviationScore
+      };
+    });
+    
+    // Sort to find ranks
+    const sortedChalk = [...allMetrics].sort((a, b) => b.chalkScore - a.chalkScore);
+    const sortedHerding = [...allMetrics].sort((a, b) => b.herdingScore - a.herdingScore);
+    const sortedDeviation = [...allMetrics].sort((a, b) => b.deviationScore - a.deviationScore);
+    
+    const chalkRank = sortedChalk.findIndex(u => u.username === username) + 1;
+    const herdingRank = sortedHerding.findIndex(u => u.username === username) + 1;
+    const deviationRank = sortedDeviation.findIndex(u => u.username === username) + 1;
+    
+    return {
+      chalkScore,
+      herdingScore: herdingPercent,
+      deviationScore,
+      chalkRank,
+      herdingRank,
+      deviationRank,
+      totalUsers: allUsers.length
+    };
+  }, [bracketData, gameResults, username]);
   
   if (loading) {
     return (
@@ -393,6 +671,88 @@ const UserPage = () => {
           </CardContent>
         </Card>
       )}
+      
+      <Card sx={{ mb: 3 }}>
+        <CardHeader 
+          title="Pick Strategy Analysis" 
+          titleTypography={{ variant: 'h6' }}
+        />
+        <CardContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
+                <Typography variant="subtitle1" gutterBottom>Chalk Score</Typography>
+                <Typography variant="h4">{userPickMetrics?.chalkScore.toFixed(1)}%</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Rank: {userPickMetrics?.chalkRank} of {userPickMetrics?.totalUsers}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  How often you pick favorites based on seed
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
+                <Typography variant="subtitle1" gutterBottom>Herding Score</Typography>
+                <Typography variant="h4">{userPickMetrics?.herdingScore.toFixed(1)}%</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Rank: {userPickMetrics?.herdingRank} of {userPickMetrics?.totalUsers}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  How often you pick the same teams as the majority
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
+                <Typography variant="subtitle1" gutterBottom>Deviation Score</Typography>
+                <Typography variant="h4">{userPickMetrics?.deviationScore.toFixed(1)}</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Rank: {userPickMetrics?.deviationRank} of {userPickMetrics?.totalUsers}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  How contrarian your picks are compared to others
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+          <Box sx={{ mt: 2, textAlign: 'right' }}>
+            <Button 
+              component={RouterLink}
+              to="/pool-analysis"
+              size="small"
+              color="primary"
+            >
+              View Full Pool Analysis
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+      
+      <Card sx={{ mb: 3 }}>
+        <CardHeader 
+          title="Similar Users" 
+          titleTypography={{ variant: 'h6' }}
+        />
+        <CardContent>
+          <UserSimilarityTable 
+            similarities={userSimilarities}
+            selectedUser={username || ''}
+            limit={5}
+            showDescription={false}
+          />
+          <Box sx={{ mt: 2, textAlign: 'right' }}>
+            <Button 
+              component={RouterLink}
+              to={`/pool-analysis?user=${username}`}
+              size="small"
+              color="primary"
+            >
+              Find More Similar Users
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
       
       <Card>
         <CardHeader title="All Picks" />
