@@ -20,8 +20,8 @@ function BracketMachineTemp() {
           Coming Soon!
         </Typography>
         <Typography variant="body1">
-          We're working on an exciting new feature that will let you explore different bracket scenarios
-          and see how they affect the leaderboard. Stay tuned!
+          We're working on an exciting new feature that will let you run simulations and explore different bracket scenarios
+          to see how they affect the leaderboard. Stay tuned!
         </Typography>
       </Paper>
     </Box>

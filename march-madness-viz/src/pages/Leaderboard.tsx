@@ -182,7 +182,7 @@ const Leaderboard = () => {
   
   const createShareableLink = () => {
     const baseUrl = window.location.origin + window.location.pathname;
-    const userParams = selectedUsers.length > 0 ? `?users=${selectedUsers.join(',')}` : '';
+    const userParams = selectedUsers.length > 0 ? `#/leaderboard?users=${selectedUsers.join(',')}` : '';
     const shareableLink = baseUrl + userParams;
     
     // Copy to clipboard
