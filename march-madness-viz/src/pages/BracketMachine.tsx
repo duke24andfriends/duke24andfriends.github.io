@@ -130,6 +130,24 @@ interface PathToVictory {
   criticalGames: CriticalGame[];
 }
 
+// Import bracket module functions
+import {
+  GameProbabilities,
+  UserScore,
+  ProbabilityScore,
+  updatePredictedWinner as updateWinner,
+  simulateRandomOutcomes as simulateOutcomes,
+  setPopularWinners as setPopularPicks,
+  setPickPercentageProbabilities as setPickProbabilities,
+  setEqualProbabilities as setEqualProbs,
+  getBracketRegions,
+  getGameTeams as getTeamsFromBracket,
+  getGameTeamsConsistent as getTeamsConsistent,
+  getPredictedWinner as getPredicted,
+  getActualWinner as getActual,
+  updateGameProbability
+} from '../utils/bracketLogic';
+
 const BracketMachine = () => {
   const { 
     bracketData, 
@@ -527,9 +545,7 @@ const BracketMachine = () => {
   
   // Get game teams
   const getGameTeams = (gameId: string): string[] => {
-    if (!bracketData || !bracketData.games[gameId]) return [];
-    const game = bracketData.games[gameId];
-    return Object.keys(game.stats.pick_distribution);
+    return getTeamsFromBracket(gameId, bracketData);
   };
   
   // Handle tab change
@@ -661,80 +677,17 @@ const BracketMachine = () => {
 
   // Function to get teams for a game and ensure consistency with previous game results
   const getGameTeamsConsistent = (gameId: string): string[] => {
-    if (!bracketData) return [];
-    
-    const game = bracketData.games[gameId];
-    if (!game) return [];
-    
-    // For first round games, pull from gameResults to ensure we have all teams including 16 seeds
-    const roundName = getRoundNameFromGameId(gameId);
-    if (roundName === "ROUND_64") {
-      // Find this game in gameResults to get both winner and loser
-      const gameResult = gameResults.find(result => result.gameId === gameId);
-      if (gameResult) {
-        return [gameResult.winner, gameResult.loser];
-      }
-      // If not found in gameResults, fall back to bracket data
-      return Object.keys(game.stats.pick_distribution);
-    }
-    
-    // For later rounds, the teams should be determined by winners of previous games
-    // Map from game ID to the two previous games that feed into it
-    const gameToFeederGames: Record<string, string[]> = {
-      // Round of 32
-      "33": ["1", "2"], "34": ["3", "4"], "35": ["5", "6"], "36": ["7", "8"],
-      "37": ["9", "10"], "38": ["11", "12"], "39": ["13", "14"], "40": ["15", "16"],
-      "41": ["17", "18"], "42": ["19", "20"], "43": ["21", "22"], "44": ["23", "24"],
-      "45": ["25", "26"], "46": ["27", "28"], "47": ["29", "30"], "48": ["31", "32"],
-      
-      // Sweet 16
-      "49": ["33", "34"], "50": ["35", "36"], "51": ["37", "38"], "52": ["39", "40"],
-      "53": ["41", "42"], "54": ["43", "44"], "55": ["45", "46"], "56": ["47", "48"],
-      
-      // Elite 8
-      "57": ["49", "50"], "58": ["51", "52"], "59": ["53", "54"], "60": ["55", "56"],
-      
-      // Final Four
-      "61": ["57", "58"], "62": ["59", "60"],
-      
-      // Championship
-      "63": ["61", "62"]
-    };
-    
-    const feederGames = gameToFeederGames[gameId];
-    if (!feederGames) return Object.keys(game.stats.pick_distribution);
-    
-    // Determine which teams should be in this game based on previous winners
-    const teams: string[] = [];
-    
-    for (const feederGameId of feederGames) {
-      // Check if there's an actual winner for this feeder game
-      const actualWinner = gameWinners.find(w => w.gameId === feederGameId)?.winner;
-      
-      // Or a predicted winner
-      const predictedWinner = predictedWinners.find(w => w.gameId === feederGameId)?.winner;
-      
-      if (actualWinner) {
-        teams.push(actualWinner);
-      } else if (predictedWinner) {
-        teams.push(predictedWinner);
-      } else {
-        // If no winner is determined, just show "TBD"
-        teams.push("TBD");
-      }
-    }
-    
-    return teams;
+    return getTeamsConsistent(gameId, bracketData, gameResults, gameWinners, predictedWinners);
   };
   
   // Function to get the predicted winner for a game
   const getPredictedWinner = (gameId: string): string => {
-    return predictedWinners.find(g => g.gameId === gameId)?.winner || '';
+    return getPredicted(gameId, predictedWinners);
   };
   
   // Function to get the actual winner for a game
   const getActualWinner = (gameId: string): string => {
-    return gameWinners.find(g => g.gameId === gameId)?.winner || '';
+    return getActual(gameId, gameWinners);
   };
   
   // Function to determine if we have a winner (actual or predicted) for a game
@@ -1124,39 +1077,12 @@ const BracketMachine = () => {
   const setPopularWinners = () => {
     if (!bracketData) return;
     
-    // Get unplayed games
-    const unplayedGameIds = Object.keys(bracketData.games).filter(
-      gameId => !getActualWinner(gameId)
-    );
+    // Use our utility function
+    const popularPicks = setPopularPicks(bracketData, incompleteGames);
     
-    // For each unplayed game, find the most popular pick
-    unplayedGameIds.forEach(gameId => {
-      const game = bracketData.games[gameId];
-      if (!game || !game.stats || !game.stats.pick_distribution) return;
-      
-      // Get the teams and their pick counts
-      const pickDistribution = game.stats.pick_distribution;
-      const teams = Object.keys(pickDistribution);
-      
-      if (teams.length < 2) return;
-      
-      // Find the team with the most picks
-      let mostPopularTeam = '';
-      let maxPicks = 0;
-      
-      teams.forEach(team => {
-        const pickCount = pickDistribution[team] || 0;
-        if (pickCount > maxPicks) {
-          maxPicks = pickCount;
-          mostPopularTeam = team;
-        }
-      });
-      
-      if (mostPopularTeam) {
-        // Update the winner for this game
-        updatePredictedWinner(gameId, mostPopularTeam);
-      }
-    });
+    // Update both predictedWinners and hypotheticalWinners
+    setPredictedWinners(popularPicks);
+    setHypotheticalWinners(popularPicks);
   };
   
   if (loading) {

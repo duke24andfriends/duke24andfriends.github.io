@@ -39,7 +39,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/bracket-machine" element={<BracketMachine />} />
+              {/* <Route path="/bracket-machine" element={<BracketMachine />} /> */}
               <Route path="/rounds/:roundId" element={<RoundPage />} />
               <Route path="/teams/:teamCode" element={<TeamPage />} />
               <Route path="/users/:username" element={<UserPage />} />
