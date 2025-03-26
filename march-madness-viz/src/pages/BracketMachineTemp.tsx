@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 
-function BracketMachine() {
+function BracketMachineTemp() {
   return (
     <Box sx={{ p: 3 }}>
       <Paper 
@@ -28,4 +28,4 @@ function BracketMachine() {
   );
 }
 
-export default BracketMachine; 
+export default BracketMachineTemp; 
