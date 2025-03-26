@@ -427,18 +427,16 @@ const RoundPage = () => {
                             </Button>
                           </TableCell>
                           <TableCell>
-                            {game.teams.length >= 2 ? (
+                            {(
                               <Stack direction="row" spacing={1}>
-                                <Link component={RouterLink} to={`/teams/${game.teams[0]}`}>
-                                  {game.teams[0]}
+                                <Link component={RouterLink} to={`/teams/${game.completed ? game.winner : game.teams[0]}`}>
+                                {game.completed ? game.winner : game.teams[0]}
                                 </Link>
                                 <Typography>vs</Typography>
-                                <Link component={RouterLink} to={`/teams/${game.teams[1]}`}>
-                                  {game.teams[1]}
+                                <Link component={RouterLink} to={`/teams/${game.completed ? game.loser : game.teams[1]}`}>
+                                {game.completed ? game.loser : game.teams[1]}
                                 </Link>
                               </Stack>
-                            ) : (
-                              <Typography>-</Typography>
                             )}
                           </TableCell>
                           <TableCell>
