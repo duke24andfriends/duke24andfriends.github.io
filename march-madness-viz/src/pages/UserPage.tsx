@@ -406,9 +406,16 @@ const UserPage = () => {
     const chalkScore = totalPicks > 0 ? (chalkPicks / totalPicks) * 100 : 0;
     const herdingPercent = totalPicks > 0 ? (herdingScore / totalPicks) * 100 : 0;
     
-    // Calculate rank for each metric among all users
-    const allUsers = bracketData.users ? Object.keys(bracketData.users) : [];
-    const allMetrics = allUsers.map(user => {
+    // Get all usernames that have picks - more reliable than bracketData.users
+    const allUsers = new Set<string>();
+    Object.values(bracketData.games).forEach(game => {
+      Object.keys(game.picks).forEach(user => allUsers.add(user));
+    });
+    
+    const allUsersArray = Array.from(allUsers);
+    
+    // Calculate metrics for all users
+    const allMetrics = allUsersArray.map(user => {
       let userChalkPicks = 0;
       let userTotalPicks = 0;
       let userHerdingScore = 0;
@@ -466,23 +473,37 @@ const UserPage = () => {
       };
     });
     
-    // Sort to find ranks
-    const sortedChalk = [...allMetrics].sort((a, b) => b.chalkScore - a.chalkScore);
-    const sortedHerding = [...allMetrics].sort((a, b) => b.herdingScore - a.herdingScore);
-    const sortedDeviation = [...allMetrics].sort((a, b) => b.deviationScore - a.deviationScore);
+    // Filter out any entries with invalid scores (might happen if a user has no picks)
+    const validMetrics = allMetrics.filter(m => 
+      !isNaN(m.chalkScore) && 
+      !isNaN(m.herdingScore) && 
+      !isNaN(m.deviationScore)
+    );
     
+    // Sort to find ranks
+    const sortedChalk = [...validMetrics].sort((a, b) => b.chalkScore - a.chalkScore);
+    const sortedHerding = [...validMetrics].sort((a, b) => b.herdingScore - a.herdingScore);
+    const sortedDeviation = [...validMetrics].sort((a, b) => b.deviationScore - a.deviationScore);
+    
+    // Find the user in each sorted array
     const chalkRank = sortedChalk.findIndex(u => u.username === username) + 1;
     const herdingRank = sortedHerding.findIndex(u => u.username === username) + 1;
     const deviationRank = sortedDeviation.findIndex(u => u.username === username) + 1;
+    
+    // Ensure we have valid ranks (if user is not found, rank will be 0)
+    const totalUsers = validMetrics.length;
+    const validChalkRank = chalkRank > 0 ? chalkRank : totalUsers;
+    const validHerdingRank = herdingRank > 0 ? herdingRank : totalUsers;
+    const validDeviationRank = deviationRank > 0 ? deviationRank : totalUsers;
     
     return {
       chalkScore,
       herdingScore: herdingPercent,
       deviationScore,
-      chalkRank,
-      herdingRank,
-      deviationRank,
-      totalUsers: allUsers.length
+      chalkRank: validChalkRank,
+      herdingRank: validHerdingRank,
+      deviationRank: validDeviationRank,
+      totalUsers
     };
   }, [bracketData, gameResults, username]);
   
