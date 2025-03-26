@@ -553,16 +553,32 @@ const PoolAnalysisPage = () => {
                 <FormControl fullWidth sx={{ mb: 4 }}>
                   <Autocomplete
                     id="user-select"
-                    options={userScores.map(user => user.username)}
-                    value={selectedUser}
-                    onChange={(_, newValue) => setSelectedUser(newValue || '')}
+                    options={userScores}
+                    getOptionLabel={(option) => {
+                      const nameMapping = option.bracketName && option.fullName ? 
+                        `${option.username} (${option.bracketName} - ${option.fullName})` : 
+                        option.username;
+                      return nameMapping;
+                    }}
+                    isOptionEqualToValue={(option, value) => option.username === value.username}
+                    value={userScores.find(user => user.username === selectedUser) || null}
+                    onChange={(_, newValue) => setSelectedUser(newValue ? newValue.username : '')}
                     renderInput={(params) => (
                       <TextField 
                         {...params} 
                         label="Search for a User" 
                         variant="outlined"
+                        placeholder="Search by username, bracket name, or full name"
                       />
                     )}
+                    filterOptions={(options, { inputValue }) => {
+                      const filterValue = inputValue.toLowerCase();
+                      return options.filter(option => 
+                        option.username.toLowerCase().includes(filterValue) ||
+                        (option.bracketName && option.bracketName.toLowerCase().includes(filterValue)) ||
+                        (option.fullName && option.fullName.toLowerCase().includes(filterValue))
+                      );
+                    }}
                   />
                 </FormControl>
                 

@@ -197,7 +197,9 @@ const Leaderboard = () => {
   // Filter users based on search term
   const filteredUsers = useMemo(() => {
     return userScores.filter(user => 
-      user.username.toLowerCase().includes(searchTerm.toLowerCase())
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.bracketName && user.bracketName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.fullName && user.fullName.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [userScores, searchTerm]);
   
@@ -437,7 +439,7 @@ const Leaderboard = () => {
               <TextField
                 fullWidth
                 variant="outlined"
-                placeholder="Search users..."
+                placeholder="Search by username, bracket name, or real name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 InputProps={{
@@ -483,6 +485,8 @@ const Leaderboard = () => {
               <TableRow>
                 <TableCell>Rank</TableCell>
                 <TableCell>Username</TableCell>
+                <TableCell>Bracket Name</TableCell>
+                <TableCell>Full Name</TableCell>
                 <TableCell align="right">Score</TableCell>
                 <TableCell align="right">Max Possible</TableCell>
                 <TableCell align="right">Champion</TableCell>
@@ -534,6 +538,8 @@ const Leaderboard = () => {
                           {user.username}
                         </Button>
                       </TableCell>
+                      <TableCell>{user.bracketName || user.username}</TableCell>
+                      <TableCell>{user.fullName || user.username}</TableCell>
                       <TableCell align="right">{user.score}</TableCell>
                       <TableCell align="right">
                         {user.maxPossibleScore !== undefined ? user.maxPossibleScore : '-'}
@@ -573,11 +579,11 @@ const Leaderboard = () => {
                     </TableRow>
                     
                     <TableRow>
-                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
+                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                           <Box sx={{ margin: 1 }}>
                             <Typography variant="subtitle2" gutterBottom component="div">
-                              Round Scores for {user.username}
+                              Round Scores for {user.bracketName || user.username}
                             </Typography>
                             <Table size="small" aria-label="round scores">
                               <TableHead>

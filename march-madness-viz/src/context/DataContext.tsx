@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { calculateRoundAccuracy, calculateHypotheticalScores, parseGameResults } from '../utils/dataProcessing';
+import { calculateRoundAccuracy, calculateHypotheticalScores, parseGameResults, parseUserNameMapping, UserNameMapping } from '../utils/dataProcessing';
 import { BracketData, GameWinner, UserScore, RoundAccuracy, LeaderboardTrend, GameResult, ROUNDS, getPointsForGame } from '../types';
 
 interface DataContextProps {
@@ -7,6 +7,7 @@ interface DataContextProps {
   gameWinners: GameWinner[];
   gameResults: GameResult[];
   userScores: UserScore[];
+  userNameMapping: Record<string, UserNameMapping>;
   filteredUsernames: string[];
   roundAccuracy: Record<string, RoundAccuracy>;
   teamConfidence: Array<{ team: string } & Record<string, number>>;
@@ -29,6 +30,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
   const [gameWinners, setGameWinners] = useState<GameWinner[]>([]);
   const [gameResults, setGameResults] = useState<GameResult[]>([]);
   const [userScores, setUserScores] = useState<UserScore[]>([]);
+  const [userNameMapping, setUserNameMapping] = useState<Record<string, UserNameMapping>>({});
   const [filteredUsernames, setFilteredUsernames] = useState<string[]>([]);
   const [roundAccuracy, setRoundAccuracy] = useState<Record<string, RoundAccuracy>>({});
   const [teamConfidence, setTeamConfidence] = useState<Array<{ team: string } & Record<string, number>>>([]);
@@ -63,6 +65,17 @@ export const DataProvider = ({ children }: DataProviderProps) => {
         const resultsCSV = await resultsResponse.text();
         const gameResults = parseGameResults(resultsCSV);
         
+        // Fetch user to name mapping
+        const userNameMappingResponse = await fetch('/data/user_to_name_mapping.csv');
+        const userNameMappingCSV = await userNameMappingResponse.text();
+        const userNameMappings = parseUserNameMapping(userNameMappingCSV);
+        
+        // Convert user mapping array to record for easy lookup
+        const userNameMappingRecord: Record<string, UserNameMapping> = {};
+        userNameMappings.forEach(mapping => {
+          userNameMappingRecord[mapping.username] = mapping;
+        });
+        
         // Derive game winners from game results
         const gameWinners = gameResults.map(result => ({
           gameId: result.gameId,
@@ -76,6 +89,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
         let userScores = calculateHypotheticalScores(bracketData, gameWinners, []);
         
         // Enhance user scores with round scores, champion picks, and max possible scores
+        // and add user name mapping info
         userScores = userScores.map(userScore => {
           const { username } = userScore;
           const roundScores: Record<string, number> = {
@@ -124,11 +138,16 @@ export const DataProvider = ({ children }: DataProviderProps) => {
             }
           });
           
+          // Get user's real name and bracket name if available
+          const nameMapping = userNameMappingRecord[username];
+          
           return {
             ...userScore,
             roundScores,
             champion,
-            maxPossibleScore
+            maxPossibleScore,
+            bracketName: nameMapping?.bracketName || username,
+            fullName: nameMapping?.fullName || username
           };
         });
         
@@ -227,6 +246,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
         setUserScores(userScores);
         setTeamConfidence(teamConfidence);
         setLeaderboardTrend(leaderboardTrend);
+        setUserNameMapping(userNameMappingRecord);
         setError(null);
       } catch (err) {
         console.error('Error loading data:', err);
@@ -243,9 +263,20 @@ export const DataProvider = ({ children }: DataProviderProps) => {
   useEffect(() => {
     if (bracketData) {
       const newScores = calculateHypotheticalScores(bracketData, gameWinners, hypotheticalWinners);
-      setUserScores(newScores);
+      
+      // Add user name mapping info to scores
+      const enhancedScores = newScores.map(score => {
+        const nameMapping = userNameMapping[score.username];
+        return {
+          ...score,
+          bracketName: nameMapping?.bracketName || score.username,
+          fullName: nameMapping?.fullName || score.username
+        };
+      });
+      
+      setUserScores(enhancedScores);
     }
-  }, [bracketData, gameWinners, hypotheticalWinners]);
+  }, [bracketData, gameWinners, hypotheticalWinners, userNameMapping]);
   
   // Parse URL params for filtered usernames
   useEffect(() => {
@@ -263,6 +294,7 @@ export const DataProvider = ({ children }: DataProviderProps) => {
     gameWinners,
     gameResults,
     userScores,
+    userNameMapping,
     filteredUsernames,
     roundAccuracy,
     teamConfidence,

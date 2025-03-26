@@ -37,14 +37,14 @@ export interface GameResult {
 
 export interface UserScore {
   username: string;
+  bracketName?: string;
+  fullName?: string;
   score: number;
   correctPicks: number;
   totalPicks: number;
-  roundScores?: {
-    [round: string]: number;
-  };
-  maxPossibleScore?: number;
+  roundScores?: Record<string, number>;
   champion?: string;
+  maxPossibleScore?: number;
 }
 
 export interface TeamConfidence {

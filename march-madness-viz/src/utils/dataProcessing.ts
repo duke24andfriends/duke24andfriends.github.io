@@ -299,4 +299,39 @@ export function getOpponent(gameResults: { gameId: string; winner: string; loser
   if (game.loser === team) return game.winner;
   
   return '';
-} 
+}
+
+export interface UserNameMapping {
+  username: string;
+  bracketName: string;
+  fullName: string;
+}
+
+/**
+ * Parse user to name mapping CSV data
+ * @param csvData The CSV data containing the user to name mapping
+ * @returns Array of user name mappings
+ */
+export const parseUserNameMapping = (csvData: string): UserNameMapping[] => {
+  const lines = csvData.split('\n');
+  // Skip header row
+  const mappings: UserNameMapping[] = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // CSV format: bracket,username,name
+    const parts = line.split(',');
+    if (parts.length >= 3) {
+      const [bracketName, username, fullName] = parts;
+      mappings.push({
+        username,
+        bracketName,
+        fullName
+      });
+    }
+  }
+  
+  return mappings;
+}; 

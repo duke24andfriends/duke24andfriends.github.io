@@ -8,8 +8,10 @@ import {
   TableRow,
   TableCell,
   Link,
+  Tooltip
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
+import { useData } from '../context/DataContext';
 
 export interface UserSimilarity {
   username: string;
@@ -32,6 +34,9 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
   limit = 15,
   showDescription = true 
 }) => {
+  // Access user name mappings from context
+  const { userNameMapping } = useData();
+  
   // State for managing sorting
   const [sortConfig, setSortConfig] = useState<{
     key: 'similarity' | 'weightedSimilarity' | 'sharedPoints' | 'score';
@@ -86,6 +91,8 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
         <TableHead>
           <TableRow>
             <TableCell>Username</TableCell>
+            <TableCell>Bracket Name</TableCell>
+            <TableCell>Full Name</TableCell>
             <TableCell 
               align="right" 
               onClick={() => requestSort('similarity')}
@@ -133,19 +140,36 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
           </TableRow>
         </TableHead>
         <TableBody>
-          {sortedSimilarities.map(user => (
-            <TableRow key={user.username}>
-              <TableCell>
-                <Link component={RouterLink} to={`/users/${user.username}`}>
-                  {user.username}
-                </Link>
-              </TableCell>
-              <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
-              <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
-              <TableCell align="right">{user.sharedPoints}</TableCell>
-              <TableCell align="right">{user.score}</TableCell>
-            </TableRow>
-          ))}
+          {sortedSimilarities.map(user => {
+            const userMapping = userNameMapping[user.username] || { 
+              bracketName: user.username, 
+              fullName: user.username 
+            };
+            
+            return (
+              <TableRow key={user.username}>
+                <TableCell>
+                  <Link component={RouterLink} to={`/users/${user.username}`}>
+                    {user.username}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <Tooltip title={userMapping.bracketName} arrow placement="top">
+                    <span>{userMapping.bracketName}</span>
+                  </Tooltip>
+                </TableCell>
+                <TableCell>
+                  <Tooltip title={userMapping.fullName} arrow placement="top">
+                    <span>{userMapping.fullName}</span>
+                  </Tooltip>
+                </TableCell>
+                <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
+                <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
+                <TableCell align="right">{user.sharedPoints}</TableCell>
+                <TableCell align="right">{user.score}</TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </Box>
