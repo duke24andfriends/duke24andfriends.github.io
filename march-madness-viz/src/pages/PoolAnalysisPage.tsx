@@ -77,6 +77,8 @@ function TabPanel(props: TabPanelProps) {
 interface UserSimilarity {
   username: string;
   similarity: number;
+  weightedSimilarity: number;
+  sharedPoints: number;
   score: number;
 }
 
@@ -117,48 +119,155 @@ const PoolAnalysisPage = () => {
     if (!bracketData || !selectedUser) return [];
     
     const userPicks = new Map<string, Set<string>>();
+    const userPicksWithWeights = new Map<string, Map<string, number>>();
+    
+    // Round weights for scoring
+    const roundWeights: Record<string, number> = {
+      'ROUND_64': 10,
+      'ROUND_32': 20,
+      'SWEET_16': 40,
+      'ELITE_8': 80,
+      'FINAL_FOUR': 160,
+      'CHAMPIONSHIP': 320
+    };
+    
+    // Function to get round name from game ID
+    const getRoundNameFromGameId = (gameId: string): string => {
+      const id = parseInt(gameId);
+      if (id >= 1 && id <= 32) return 'ROUND_64';
+      if (id >= 33 && id <= 48) return 'ROUND_32';
+      if (id >= 49 && id <= 56) return 'SWEET_16';
+      if (id >= 57 && id <= 60) return 'ELITE_8';
+      if (id >= 61 && id <= 62) return 'FINAL_FOUR';
+      return 'CHAMPIONSHIP';
+    };
     
     // Collect all picks for each user
     Object.entries(bracketData.games).forEach(([gameId, game]) => {
+      // Get the round weight for this game
+      const roundName = getRoundNameFromGameId(gameId);
+      const weight = roundWeights[roundName];
+      
       Object.entries(game.picks).forEach(([username, pick]) => {
+        // Regular similarity - just the picks
         if (!userPicks.has(username)) {
           userPicks.set(username, new Set());
         }
         userPicks.get(username)?.add(`${gameId}:${pick}`);
+        
+        // Weighted similarity - with round weights
+        if (!userPicksWithWeights.has(username)) {
+          userPicksWithWeights.set(username, new Map());
+        }
+        userPicksWithWeights.get(username)?.set(`${gameId}:${pick}`, weight);
       });
     });
     
     // Calculate Jaccard similarity between selected user and all others
     const selectedUserPicks = userPicks.get(selectedUser);
-    if (!selectedUserPicks) return [];
+    const selectedUserWeightedPicks = userPicksWithWeights.get(selectedUser);
+    
+    if (!selectedUserPicks || !selectedUserWeightedPicks) return [];
     
     const similarities: UserSimilarity[] = [];
     
     userPicks.forEach((picks, username) => {
       if (username === selectedUser) return;
       
-      // Calculate intersection
+      // Calculate regular similarity (Jaccard index)
       const intersection = new Set(
         Array.from(selectedUserPicks).filter(pick => picks.has(pick))
       );
       
-      // Calculate union
       const union = new Set([...selectedUserPicks, ...picks]);
       
       // Jaccard similarity: size of intersection / size of union
       const similarity = intersection.size / union.size;
+      
+      // Calculate weighted similarity
+      const userWeightedPicks = userPicksWithWeights.get(username);
+      if (!userWeightedPicks) return;
+      
+      let weightedIntersectionSum = 0;
+      let weightedUnionSum = 0;
+      let sharedPoints = 0;
+      
+      // Get all unique picks between both users
+      const allPickKeys = new Set([
+        ...Array.from(selectedUserWeightedPicks.keys()),
+        ...Array.from(userWeightedPicks.keys())
+      ]);
+      
+      // Calculate weighted sums
+      allPickKeys.forEach(pickKey => {
+        const selectedUserWeight = selectedUserWeightedPicks.get(pickKey) || 0;
+        const otherUserWeight = userWeightedPicks.get(pickKey) || 0;
+        
+        // For intersection, take the minimum weight (only if both users picked it)
+        if (selectedUserWeight > 0 && otherUserWeight > 0) {
+          weightedIntersectionSum += Math.min(selectedUserWeight, otherUserWeight);
+          
+          // If both users picked the same team for this game, add the points to sharedPoints
+          sharedPoints += selectedUserWeight;
+        }
+        
+        // For union, take the maximum weight
+        weightedUnionSum += Math.max(selectedUserWeight, otherUserWeight);
+      });
+      
+      // Weighted Jaccard similarity
+      const weightedSimilarity = weightedUnionSum > 0 ? 
+        weightedIntersectionSum / weightedUnionSum : 0;
       
       const userScore = userScores.find(score => score.username === username)?.score || 0;
       
       similarities.push({
         username,
         similarity,
+        weightedSimilarity,
+        sharedPoints,
         score: userScore
       });
     });
     
-    return similarities.sort((a, b) => b.similarity - a.similarity);
+    return similarities.sort((a, b) => b.weightedSimilarity - a.weightedSimilarity);
   }, [bracketData, selectedUser, userScores]);
+  
+  // State for managing sorting
+  const [sortConfig, setSortConfig] = useState<{
+    key: 'similarity' | 'weightedSimilarity' | 'sharedPoints' | 'score';
+    direction: 'ascending' | 'descending';
+  }>({
+    key: 'weightedSimilarity',
+    direction: 'descending'
+  });
+
+  // Function to handle sorting
+  const requestSort = (key: 'similarity' | 'weightedSimilarity' | 'sharedPoints' | 'score') => {
+    let direction: 'ascending' | 'descending' = 'descending';
+    if (sortConfig.key === key && sortConfig.direction === 'descending') {
+      direction = 'ascending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Get sorted data
+  const sortedSimilarities = useMemo(() => {
+    if (!userSimilarities.length) return [];
+    const sortableItems = [...userSimilarities];
+    
+    sortableItems.sort((a, b) => {
+      if (a[sortConfig.key] < b[sortConfig.key]) {
+        return sortConfig.direction === 'ascending' ? -1 : 1;
+      }
+      if (a[sortConfig.key] > b[sortConfig.key]) {
+        return sortConfig.direction === 'ascending' ? 1 : -1;
+      }
+      return 0;
+    });
+    
+    return sortableItems;
+  }, [userSimilarities, sortConfig]);
   
   // Calculate user chalk and herding scores
   const userPickStrategies = useMemo(() => {
@@ -482,28 +591,88 @@ const PoolAnalysisPage = () => {
                     Please select a user from the dropdown to see similar brackets.
                   </Typography>
                 ) : (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Username</TableCell>
-                        <TableCell align="right">Similarity</TableCell>
-                        <TableCell align="right">Score</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {userSimilarities.slice(0, 15).map(user => (
-                        <TableRow key={user.username}>
-                          <TableCell>
-                            <Link component={RouterLink} to={`/users/${user.username}`}>
-                              {user.username}
-                            </Link>
+                  <>
+                    <Typography variant="body2" paragraph>
+                      Three similarity metrics are shown:
+                      <ul>
+                        <li><strong>Regular:</strong> Standard Jaccard similarity (all picks weighted equally)</li>
+                        <li><strong>Weighted:</strong> Picks weighted by round value (10, 20, 40, 80, 160, 320)</li>
+                        <li><strong>Shared Points:</strong> Total points from picks that both users have in common</li>
+                      </ul>
+                      Click column headers to sort. Weighted metrics emphasize matches in later rounds, which are worth more points.
+                    </Typography>
+                    
+                    <Tabs value={0} aria-label="similarity tabs">
+                      <Tab label="All Users" />
+                    </Tabs>
+                    
+                    <Table size="small" sx={{ mt: 2 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Username</TableCell>
+                          <TableCell 
+                            align="right" 
+                            onClick={() => requestSort('similarity')}
+                            sx={{ 
+                              cursor: 'pointer',
+                              fontWeight: sortConfig.key === 'similarity' ? 'bold' : 'normal',
+                              textDecoration: sortConfig.key === 'similarity' ? 'underline' : 'none'
+                            }}
+                          >
+                            Regular Similarity {sortConfig.key === 'similarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
                           </TableCell>
-                          <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
-                          <TableCell align="right">{user.score}</TableCell>
+                          <TableCell 
+                            align="right"
+                            onClick={() => requestSort('weightedSimilarity')}
+                            sx={{ 
+                              cursor: 'pointer',
+                              fontWeight: sortConfig.key === 'weightedSimilarity' ? 'bold' : 'normal',
+                              textDecoration: sortConfig.key === 'weightedSimilarity' ? 'underline' : 'none'
+                            }}
+                          >
+                            Weighted Similarity {sortConfig.key === 'weightedSimilarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                          </TableCell>
+                          <TableCell 
+                            align="right"
+                            onClick={() => requestSort('sharedPoints')}
+                            sx={{ 
+                              cursor: 'pointer',
+                              fontWeight: sortConfig.key === 'sharedPoints' ? 'bold' : 'normal',
+                              textDecoration: sortConfig.key === 'sharedPoints' ? 'underline' : 'none'
+                            }}
+                          >
+                            Shared Points {sortConfig.key === 'sharedPoints' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                          </TableCell>
+                          <TableCell 
+                            align="right"
+                            onClick={() => requestSort('score')}
+                            sx={{ 
+                              cursor: 'pointer',
+                              fontWeight: sortConfig.key === 'score' ? 'bold' : 'normal',
+                              textDecoration: sortConfig.key === 'score' ? 'underline' : 'none'
+                            }}
+                          >
+                            Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                          </TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHead>
+                      <TableBody>
+                        {sortedSimilarities.slice(0, 15).map(user => (
+                          <TableRow key={user.username}>
+                            <TableCell>
+                              <Link component={RouterLink} to={`/users/${user.username}`}>
+                                {user.username}
+                              </Link>
+                            </TableCell>
+                            <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
+                            <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
+                            <TableCell align="right">{user.sharedPoints}</TableCell>
+                            <TableCell align="right">{user.score}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
                 )}
               </CardContent>
             </Card>
