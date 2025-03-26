@@ -533,9 +533,21 @@ const UserPage = () => {
   
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        User Profile: {username}
-      </Typography>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          User Profile: {username}
+        </Typography>
+        {userData?.bracketName && userData.bracketName !== username && (
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            Bracket Name: {userData.bracketName}
+          </Typography>
+        )}
+        {userData?.fullName && userData.fullName !== username && userData?.fullName !== userData?.bracketName && (
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            Full Name: {userData.fullName}
+          </Typography>
+        )}
+      </Box>
       
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={6}>
@@ -623,26 +635,28 @@ const UserPage = () => {
                 />
               </Box>
               
-              <Table size="small" sx={{ mt: 2 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Round</TableCell>
-                    <TableCell align="right">Correct</TableCell>
-                    <TableCell align="right">Total</TableCell>
-                    <TableCell align="right">Points</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {Object.entries(picksByRound).map(([round, stats]) => (
-                    <TableRow key={round}>
-                      <TableCell>{round.replace('_', ' ')}</TableCell>
-                      <TableCell align="right">{stats.correct}</TableCell>
-                      <TableCell align="right">{stats.total}</TableCell>
-                      <TableCell align="right">{stats.points}</TableCell>
+              <Paper sx={{ overflowX: 'auto', width: '100%', mt: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Round</TableCell>
+                      <TableCell align="right">Correct</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                      <TableCell align="right">Points</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {Object.entries(picksByRound).map(([round, stats]) => (
+                      <TableRow key={round}>
+                        <TableCell>{round.replace('_', ' ')}</TableCell>
+                        <TableCell align="right">{stats.correct}</TableCell>
+                        <TableCell align="right">{stats.total}</TableCell>
+                        <TableCell align="right">{stats.points}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Paper>
             </CardContent>
           </Card>
         </Grid>
@@ -778,7 +792,7 @@ const UserPage = () => {
       <Card>
         <CardHeader title="All Picks" />
         <CardContent>
-          <Paper sx={{ overflowX: 'auto' }}>
+          <Paper sx={{ overflowX: 'auto', width: '100%' }}>
             <Table size="small">
               <TableHead>
                 <TableRow>

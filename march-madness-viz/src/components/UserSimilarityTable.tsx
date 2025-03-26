@@ -8,7 +8,8 @@ import {
   TableRow,
   TableCell,
   Link,
-  Tooltip
+  Tooltip,
+  Paper
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
@@ -87,91 +88,97 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
         </Typography>
       )}
       
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Username</TableCell>
-            <TableCell>Bracket Name</TableCell>
-            <TableCell>Full Name</TableCell>
-            <TableCell 
-              align="right" 
-              onClick={() => requestSort('similarity')}
-              sx={{ 
-                cursor: 'pointer',
-                fontWeight: sortConfig.key === 'similarity' ? 'bold' : 'normal',
-                textDecoration: sortConfig.key === 'similarity' ? 'underline' : 'none'
-              }}
-            >
-              Regular Similarity {sortConfig.key === 'similarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-            </TableCell>
-            <TableCell 
-              align="right"
-              onClick={() => requestSort('weightedSimilarity')}
-              sx={{ 
-                cursor: 'pointer',
-                fontWeight: sortConfig.key === 'weightedSimilarity' ? 'bold' : 'normal',
-                textDecoration: sortConfig.key === 'weightedSimilarity' ? 'underline' : 'none'
-              }}
-            >
-              Weighted Similarity {sortConfig.key === 'weightedSimilarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-            </TableCell>
-            <TableCell 
-              align="right"
-              onClick={() => requestSort('sharedPoints')}
-              sx={{ 
-                cursor: 'pointer',
-                fontWeight: sortConfig.key === 'sharedPoints' ? 'bold' : 'normal',
-                textDecoration: sortConfig.key === 'sharedPoints' ? 'underline' : 'none'
-              }}
-            >
-              Shared Points {sortConfig.key === 'sharedPoints' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-            </TableCell>
-            <TableCell 
-              align="right"
-              onClick={() => requestSort('score')}
-              sx={{ 
-                cursor: 'pointer',
-                fontWeight: sortConfig.key === 'score' ? 'bold' : 'normal',
-                textDecoration: sortConfig.key === 'score' ? 'underline' : 'none'
-              }}
-            >
-              Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {sortedSimilarities.map(user => {
-            const userMapping = userNameMapping[user.username] || { 
-              bracketName: user.username, 
-              fullName: user.username 
-            };
-            
-            return (
-              <TableRow key={user.username}>
-                <TableCell>
-                  <Link component={RouterLink} to={`/users/${user.username}`}>
-                    {user.username}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Tooltip title={userMapping.bracketName} arrow placement="top">
-                    <span>{userMapping.bracketName}</span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell>
-                  <Tooltip title={userMapping.fullName} arrow placement="top">
-                    <span>{userMapping.fullName}</span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
-                <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
-                <TableCell align="right">{user.sharedPoints}</TableCell>
-                <TableCell align="right">{user.score}</TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <Paper sx={{ overflowX: 'auto', width: '100%' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Username</TableCell>
+              <TableCell>Bracket Name</TableCell>
+              <TableCell>Full Name</TableCell>
+              <TableCell 
+                align="right" 
+                onClick={() => requestSort('similarity')}
+                sx={{ 
+                  cursor: 'pointer',
+                  fontWeight: sortConfig.key === 'similarity' ? 'bold' : 'normal',
+                  textDecoration: sortConfig.key === 'similarity' ? 'underline' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Regular Similarity {sortConfig.key === 'similarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+              </TableCell>
+              <TableCell 
+                align="right"
+                onClick={() => requestSort('weightedSimilarity')}
+                sx={{ 
+                  cursor: 'pointer',
+                  fontWeight: sortConfig.key === 'weightedSimilarity' ? 'bold' : 'normal',
+                  textDecoration: sortConfig.key === 'weightedSimilarity' ? 'underline' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Weighted Similarity {sortConfig.key === 'weightedSimilarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+              </TableCell>
+              <TableCell 
+                align="right"
+                onClick={() => requestSort('sharedPoints')}
+                sx={{ 
+                  cursor: 'pointer',
+                  fontWeight: sortConfig.key === 'sharedPoints' ? 'bold' : 'normal',
+                  textDecoration: sortConfig.key === 'sharedPoints' ? 'underline' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Shared Points {sortConfig.key === 'sharedPoints' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+              </TableCell>
+              <TableCell 
+                align="right"
+                onClick={() => requestSort('score')}
+                sx={{ 
+                  cursor: 'pointer',
+                  fontWeight: sortConfig.key === 'score' ? 'bold' : 'normal',
+                  textDecoration: sortConfig.key === 'score' ? 'underline' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sortedSimilarities.map(user => {
+              const userMapping = userNameMapping[user.username] || { 
+                bracketName: user.username, 
+                fullName: user.username 
+              };
+              
+              return (
+                <TableRow key={user.username}>
+                  <TableCell>
+                    <Link component={RouterLink} to={`/users/${user.username}`}>
+                      {user.username}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip title={userMapping.bracketName} arrow placement="top">
+                      <span>{userMapping.bracketName}</span>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip title={userMapping.fullName} arrow placement="top">
+                      <span>{userMapping.fullName}</span>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
+                  <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
+                  <TableCell align="right">{user.sharedPoints}</TableCell>
+                  <TableCell align="right">{user.score}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Paper>
     </Box>
   );
 };

@@ -585,33 +585,35 @@ const Leaderboard = () => {
                             <Typography variant="subtitle2" gutterBottom component="div">
                               Round Scores for {user.bracketName || user.username}
                             </Typography>
-                            <Table size="small" aria-label="round scores">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Round</TableCell>
-                                  <TableCell align="right">Score</TableCell>
-                                  <TableCell align="right">Points Possible</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {user.roundScores && Object.entries(user.roundScores).map(([round, score]) => (
-                                  <TableRow key={round}>
-                                    <TableCell component="th" scope="row">
-                                      {getRoundDisplayName(round)}
-                                    </TableCell>
-                                    <TableCell align="right">{score}</TableCell>
-                                    <TableCell align="right">
-                                      {ROUNDS[round as keyof typeof ROUNDS]?.length * 
-                                       (round === 'ROUND_64' ? 10 : 
-                                        round === 'ROUND_32' ? 20 :
-                                        round === 'SWEET_16' ? 40 :
-                                        round === 'ELITE_8' ? 80 :
-                                        round === 'FINAL_FOUR' ? 160 : 320)}
-                                    </TableCell>
+                            <TableContainer>
+                              <Table size="small" aria-label="round scores">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Round</TableCell>
+                                    <TableCell align="right">Score</TableCell>
+                                    <TableCell align="right">Points Possible</TableCell>
                                   </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                                </TableHead>
+                                <TableBody>
+                                  {user.roundScores && Object.entries(user.roundScores).map(([round, score]) => (
+                                    <TableRow key={round}>
+                                      <TableCell component="th" scope="row">
+                                        {getRoundDisplayName(round)}
+                                      </TableCell>
+                                      <TableCell align="right">{score}</TableCell>
+                                      <TableCell align="right">
+                                        {ROUNDS[round as keyof typeof ROUNDS]?.length * 
+                                         (round === 'ROUND_64' ? 10 : 
+                                          round === 'ROUND_32' ? 20 :
+                                          round === 'SWEET_16' ? 40 :
+                                          round === 'ELITE_8' ? 80 :
+                                          round === 'FINAL_FOUR' ? 160 : 320)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
                           </Box>
                         </Collapse>
                       </TableCell>
