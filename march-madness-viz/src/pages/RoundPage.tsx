@@ -76,6 +76,15 @@ function getMostRecentRound(gameResults: any[]): string {
   return 'ROUND_64'; // Default fallback
 }
 
+// Add a helper function to get the winner of a game (if it exists)
+// Place this before the RoundPage function
+
+function getGameWinner(gameId: string | number) {
+  // This will be referenced inside the component, 
+  // so we need to define it outside and use it as needed
+  return null; // Placeholder - will be implemented within the component
+}
+
 const RoundPage = () => {
   const { roundId } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
@@ -84,6 +93,12 @@ const RoundPage = () => {
   
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
+  
+  // Define the getGameWinner function within the component to access gameWinners
+  const getGameWinner = (gameId: string | number) => {
+    const gameWinner = gameWinners.find(winner => winner.gameId === gameId.toString());
+    return gameWinner?.winner || null;
+  };
   
   if (loading) {
     return (
@@ -154,6 +169,39 @@ const RoundPage = () => {
       accuracy = (correctPicks / totalPicks) * 100;
     }
     
+    // Get feeding games information - which previous games will determine the matchup
+    // This is based on the NCAA bracket structure
+    let feedingGames = [];
+    const gameIdNum = parseInt(gameId);
+    
+    // Elite 8 (57-60) is fed by Sweet 16 (49-56)
+    if (gameIdNum >= 57 && gameIdNum <= 60) {
+      // Each Elite 8 game is fed by 2 Sweet 16 games
+      // 57: winners of 49 & 50
+      // 58: winners of 51 & 52
+      // 59: winners of 53 & 54
+      // 60: winners of 55 & 56
+      const base = 48;
+      feedingGames = [
+        (gameIdNum - 57) * 2 + base + 1,
+        (gameIdNum - 57) * 2 + base + 2
+      ];
+    }
+    // Final Four (61-62) is fed by Elite 8 (57-60)
+    else if (gameIdNum >= 61 && gameIdNum <= 62) {
+      // 61: winners of 57 & 58
+      // 62: winners of 59 & 60
+      const base = 56;
+      feedingGames = [
+        (gameIdNum - 61) * 2 + base + 1,
+        (gameIdNum - 61) * 2 + base + 2
+      ];
+    }
+    // Championship (63) is fed by Final Four (61-62)
+    else if (gameIdNum === 63) {
+      feedingGames = [61, 62];
+    }
+    
     return {
       gameId,
       teams,
@@ -165,15 +213,16 @@ const RoundPage = () => {
       correctPicks,
       totalPicks,
       accuracy,
-      pickDistribution: game.stats.pick_distribution
+      pickDistribution: game.stats.pick_distribution,
+      feedingGames // Add the feeding games to the game details
     };
   }).filter(Boolean);
   
   // Sort games by accuracy or by gameId
   const sortedGames = [...gameDetails].sort((a, b) => 
     sortByAccuracy 
-      ? b.accuracy - a.accuracy // Sort by accuracy (descending)
-      : parseInt(a.gameId) - parseInt(b.gameId) // Sort by game ID (ascending)
+      ? (b?.accuracy || 0) - (a?.accuracy || 0) // Sort by accuracy (descending)
+      : parseInt(a?.gameId || '0') - parseInt(b?.gameId || '0') // Sort by game ID (ascending)
   );
   
   // Calculate average accuracy for this round
@@ -447,13 +496,41 @@ const RoundPage = () => {
                           <TableCell>
                             {(
                               <Stack direction="row" spacing={1}>
-                                <Link component={RouterLink} to={`/teams/${game.completed ? game.winner : game.teams[0]}`}>
-                                {game.completed ? game.winner : game.teams[0]}
-                                </Link>
-                                <Typography>vs</Typography>
-                                <Link component={RouterLink} to={`/teams/${game.completed ? game.loser : game.teams[1]}`}>
-                                {game.completed ? game.loser : game.teams[1]}
-                                </Link>
+                                {game.completed ? (
+                                  <>
+                                    <Link component={RouterLink} to={`/teams/${game.winner}`}>
+                                      {game.winner}
+                                    </Link>
+                                    <Typography>vs</Typography>
+                                    <Link component={RouterLink} to={`/teams/${game.loser}`}>
+                                      {game.loser}
+                                    </Link>
+                                  </>
+                                ) : (
+                                  game.feedingGames && game.feedingGames.length === 2 ? (
+                                    // Display pending matchup based on feeding games
+                                    <>
+                                      <Link component={RouterLink} to={`/games/${game.feedingGames[0]}`}>
+                                        {getGameWinner(game.feedingGames[0]) || `Game ${game.feedingGames[0]} Winner`}
+                                      </Link>
+                                      <Typography>vs</Typography>
+                                      <Link component={RouterLink} to={`/games/${game.feedingGames[1]}`}>
+                                        {getGameWinner(game.feedingGames[1]) || `Game ${game.feedingGames[1]} Winner`}
+                                      </Link>
+                                    </>
+                                  ) : (
+                                    // Fallback to original display if feeding games data isn't available
+                                    <>
+                                      <Link component={RouterLink} to={`/teams/${game.teams[0]}`}>
+                                        {game.teams[0]}
+                                      </Link>
+                                      <Typography>vs</Typography>
+                                      <Link component={RouterLink} to={`/teams/${game.teams[1]}`}>
+                                        {game.teams[1]}
+                                      </Link>
+                                    </>
+                                  )
+                                )}
                               </Stack>
                             )}
                           </TableCell>
