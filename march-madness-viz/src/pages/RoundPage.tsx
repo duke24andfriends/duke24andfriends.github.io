@@ -72,8 +72,6 @@ function getMostRecentRound(gameResults: any[]): string {
   if (maxGameId <= 60) return 'ELITE_8';
   if (maxGameId <= 62) return 'FINAL_FOUR';
   if (maxGameId <= 63) return 'CHAMPIONSHIP';
-
-  console.log('maxGameId', maxGameId);
   
   return 'ROUND_64'; // Default fallback
 }
@@ -86,14 +84,6 @@ const RoundPage = () => {
   
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
-  
-  // Redirect to most recent round if no roundId is provided
-  useEffect(() => {
-    if (roundId == 'default') {
-      const mostRecentRound = getMostRecentRound(gameResults);
-      navigate(`/rounds/${mostRecentRound}`, { replace: true });
-    }
-  }, [roundId, gameResults, navigate]);
   
   if (loading) {
     return (

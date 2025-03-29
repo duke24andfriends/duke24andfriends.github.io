@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import {
   AppBar,
   Box,
@@ -17,6 +17,25 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
+import { useData } from '../context/DataContext';
+
+// Helper to determine the most recent round
+function getMostRecentRound(gameResults: any[]): string {
+  if (!gameResults || gameResults.length === 0) return 'ROUND_64';
+  
+  // Find the game with the highest ID that has been played
+  const maxGameId = Math.max(...gameResults.map(game => parseInt(game.gameId)));
+  
+  // Map game ID to round
+  if (maxGameId <= 32) return 'ROUND_64';
+  if (maxGameId <= 48) return 'ROUND_32';
+  if (maxGameId <= 56) return 'SWEET_16';
+  if (maxGameId <= 60) return 'ELITE_8';
+  if (maxGameId <= 62) return 'FINAL_FOUR';
+  if (maxGameId <= 63) return 'CHAMPIONSHIP';
+  
+  return 'ROUND_64'; // Default fallback
+}
 
 const Links = [
   { name: 'Home', path: '/' },
@@ -44,6 +63,22 @@ const NavLink = ({ children, path }: { children: React.ReactNode, path: string }
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+  const { gameResults } = useData();
+
+  // Calculate most recent round
+  const mostRecentRound = useMemo(() => {
+    return getMostRecentRound(gameResults);
+  }, [gameResults]);
+  
+  const navItems = [
+    { name: 'Home', path: '/' },
+    { name: 'Leaderboard', path: '/leaderboard' },
+    { name: 'Bracket Machine', path: '/bracket-machine' },
+    { name: 'Rounds', path: `/rounds/${mostRecentRound}` },
+    { name: 'Teams', path: '/teams/DUKE' },
+    { name: 'Pool Analysis', path: '/pool-analysis' },
+  ];
 
   const handleOpen = () => {
     setIsOpen(true);
@@ -71,7 +106,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             March Madness Viz
           </Typography>
           <Stack direction="row" spacing={2} sx={{ display: { xs: 'none', md: 'flex' } }}>
-            {Links.map((link) => (
+            {navItems.map((link) => (
               <NavLink key={link.name} path={link.path}>{link.name}</NavLink>
             ))}
           </Stack>
@@ -88,7 +123,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <CloseIcon />
           </IconButton>
           <List>
-            {Links.map((link) => (
+            {navItems.map((link) => (
               <ListItem key={link.name} disablePadding>
                 <ListItemButton component={RouterLink} to={link.path} onClick={handleClose}>
                   <ListItemText primary={link.name} />
