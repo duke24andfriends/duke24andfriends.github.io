@@ -113,6 +113,10 @@ const Leaderboard = () => {
   const [tabValue, setTabValue] = useState(0);
   const [alertOpen, setAlertOpen] = useState(false);
   const [expandedUsers, setExpandedUsers] = useState<string[]>([]);
+  const [sortConfig, setSortConfig] = useState({
+    key: 'score',
+    direction: 'descending'
+  });
   
   // Initialize selectedUsers from filteredUsernames when component mounts or filteredUsernames changes
   useEffect(() => {
@@ -134,6 +138,66 @@ const Leaderboard = () => {
       setIsFilterActive(true);
     }
   }, [location.search, setFilteredUsernames]);
+  
+  // Set initial sort to score
+  useEffect(() => {
+    // Set the default sort to be score (ascending)
+    setSortConfig({
+      key: 'score',
+      direction: 'descending'
+    });
+  }, []);
+  
+  // Calculate recent performance - last 4 games
+  const getRecentPerformance = useMemo(() => {
+    if (!gameResults.length || !bracketData || !bracketData.games) return new Map<string, number>();
+    
+    const sortedGames = [...gameResults].sort((a, b) => b.order - a.order);
+    const recentGames = sortedGames.slice(0, 4); // Last 4 games
+    
+    const performanceMap = new Map<string, number>();
+    
+    // Go through recent games and check user picks
+    recentGames.forEach(game => {
+      const gameId = game.gameId;
+      const winner = game.winner;
+      
+      // Get the game data from bracketData
+      const bracketGame = bracketData.games[gameId];
+      if (!bracketGame || !bracketGame.picks) return;
+      
+      // Check each user's pick for this game
+      Object.entries(bracketGame.picks).forEach(([username, pick]) => {
+        if (pick === winner) {
+          performanceMap.set(username, (performanceMap.get(username) || 0) + 1);
+        }
+      });
+    });
+    
+    return performanceMap;
+  }, [gameResults, bracketData]);
+  
+  // Calculate rank with ties
+  const getRank = (index: number, users: any[]) => {
+    if (index === 0) return 1;
+    
+    const currentUser = users[index];
+    const prevUser = users[index - 1];
+    
+    if (sortConfig.key === 'score') {
+      return currentUser.score === prevUser.score ? getRank(index - 1, users) : index + 1;
+    } else if (sortConfig.key === 'maxPossible') {
+      return (currentUser.maxPossibleScore || 0) === (prevUser.maxPossibleScore || 0) 
+        ? getRank(index - 1, users) 
+        : index + 1;
+    } else if (sortConfig.key === 'roundScore' && sortConfig.round) {
+      return (currentUser.roundScores?.[sortConfig.round] || 0) === (prevUser.roundScores?.[sortConfig.round] || 0)
+        ? getRank(index - 1, users)
+        : index + 1;
+    }
+    
+    return index + 1;
+  };
   
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -182,7 +246,7 @@ const Leaderboard = () => {
   
   const createShareableLink = () => {
     const baseUrl = window.location.origin + window.location.pathname;
-    const userParams = selectedUsers.length > 0 ? `#/leaderboard?users=${selectedUsers.join(',')}` : '';
+    const userParams = selectedUsers.length > 0 ? `?users=${selectedUsers.join(',')}` : '';
     const shareableLink = baseUrl + userParams;
     
     // Copy to clipboard
@@ -400,6 +464,42 @@ const Leaderboard = () => {
     };
   }, [leaderboardTrend, gameResults, selectedUsers, isFilterActive]);
   
+  const handleSort = (key: 'score' | 'maxPossible' | 'roundScore', round?: string) => {
+    setSortConfig(prev => {
+      // Toggle direction if clicking the same column
+      const newDirection = (prev.key === key && 
+                            prev.round === round && 
+                            prev.direction === 'ascending') 
+                          ? 'descending' 
+                          : 'ascending';
+      
+      return {
+        key,
+        direction: newDirection,
+        round
+      };
+    });
+  };
+  
+  // Sort users based on the current sort configuration
+  const getSortedUsers = () => {
+    return [...enhancedUserScores].sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortConfig.key === 'score') {
+        comparison = a.score - b.score;
+      } else if (sortConfig.key === 'maxPossible') {
+        comparison = (a.maxPossibleScore || 0) - (b.maxPossibleScore || 0);
+      } else if (sortConfig.key === 'roundScore' && sortConfig.round) {
+        comparison = (a.roundScores?.[sortConfig.round] || 0) - (b.roundScores?.[sortConfig.round] || 0);
+      }
+      
+      return sortConfig.direction === 'ascending' ? comparison : -comparison;
+    });
+  };
+  
+  const sortedUsers = getSortedUsers();
+  
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', height: '300px', alignItems: 'center' }}>
@@ -465,6 +565,15 @@ const Leaderboard = () => {
                   label={isFilterActive ? "Filtered View" : "All Users"}
                 />
                 
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select
+                    value="expanded"
+                    displayEmpty
+                  >
+                    <MenuItem value="expanded">Expanded View</MenuItem>
+                  </Select>
+                </FormControl>
+                
                 <Button
                   variant="outlined"
                   onClick={createShareableLink}
@@ -487,18 +596,75 @@ const Leaderboard = () => {
                 <TableCell>Username</TableCell>
                 <TableCell>Bracket Name</TableCell>
                 <TableCell>Full Name</TableCell>
-                <TableCell align="right">Score</TableCell>
-                <TableCell align="right">Max Possible</TableCell>
+                <TableCell 
+                  align="right" 
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('score')}
+                >
+                  Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('maxPossible')}
+                >
+                  Max Possible {sortConfig.key === 'maxPossible' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('roundScore', 'ROUND_64')}
+                >
+                  R64 {sortConfig.key === 'roundScore' && sortConfig.round === 'ROUND_64' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('roundScore', 'ROUND_32')}
+                >
+                  R32 {sortConfig.key === 'roundScore' && sortConfig.round === 'ROUND_32' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('roundScore', 'SWEET_16')}
+                >
+                  S16 {sortConfig.key === 'roundScore' && sortConfig.round === 'SWEET_16' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('roundScore', 'ELITE_8')}
+                >
+                  E8 {sortConfig.key === 'roundScore' && sortConfig.round === 'ELITE_8' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('roundScore', 'FINAL_FOUR')}
+                >
+                  FF {sortConfig.key === 'roundScore' && sortConfig.round === 'FINAL_FOUR' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => handleSort('roundScore', 'CHAMPIONSHIP')}
+                >
+                  CH {sortConfig.key === 'roundScore' && sortConfig.round === 'CHAMPIONSHIP' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                </TableCell>
                 <TableCell align="right">Champion</TableCell>
                 <TableCell align="right">Select</TableCell>
                 <TableCell align="right">Details</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {enhancedUserScores.map((user, index) => {
+              {sortedUsers.map((user, index) => {
                 const isExpanded = expandedUsers.includes(user.username);
-                const rankChip = index === 152 ? 
-                  <Chip label="🥴" size="small" color="default" /> : null;
+                const rank = getRank(index, sortedUsers);
+                // Only show medal emoji for top score, regardless of sort type
+                const showEmoji = rank === 1 && sortConfig.key === 'score' && sortConfig.direction === 'ascending';
+                // Updated performance criteria for fire/ice emoji
+                const recentPerformance = getRecentPerformance.get(user.username) || 0;
                 
                 return (
                   <React.Fragment key={user.username}>
@@ -511,22 +677,17 @@ const Leaderboard = () => {
                       }}
                     >
                       <TableCell>
-                        {index === 0 ? (
+                        {showEmoji ? (
                           <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'gold' }}>
-                            🥇 1
-                          </Typography>
-                        ) : index === 1 ? (
-                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'silver' }}>
-                            🥈 2
-                          </Typography>
-                        ) : index === 2 ? (
-                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#CD7F32' }}>
-                            🥉 3
+                            🥇 {rank}
                           </Typography>
                         ) : (
-                          index + 1
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {rank}
+                            {recentPerformance >= 4 && <span title="Perfect in last 4 games">🔥</span>}
+                            {recentPerformance <= 1 && <span title="1 or 0 correct in last 4 games">❄️</span>}
+                          </Box>
                         )}
-                        {rankChip}
                       </TableCell>
                       <TableCell>
                         <Button 
@@ -544,6 +705,12 @@ const Leaderboard = () => {
                       <TableCell align="right">
                         {user.maxPossibleScore !== undefined ? user.maxPossibleScore : '-'}
                       </TableCell>
+                      <TableCell align="right">{user.roundScores?.ROUND_64 || 0}</TableCell>
+                      <TableCell align="right">{user.roundScores?.ROUND_32 || 0}</TableCell>
+                      <TableCell align="right">{user.roundScores?.SWEET_16 || 0}</TableCell>
+                      <TableCell align="right">{user.roundScores?.ELITE_8 || 0}</TableCell>
+                      <TableCell align="right">{user.roundScores?.FINAL_FOUR || 0}</TableCell>
+                      <TableCell align="right">{user.roundScores?.CHAMPIONSHIP || 0}</TableCell>
                       <TableCell align="right">
                         {user.champion ? (
                           <TooltipComponent title={`${user.username}'s champion pick`}>
@@ -579,7 +746,7 @@ const Leaderboard = () => {
                     </TableRow>
                     
                     <TableRow>
-                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
+                      <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={15}>
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                           <Box sx={{ margin: 1 }}>
                             <Typography variant="subtitle2" gutterBottom component="div">

@@ -784,16 +784,130 @@ const PoolAnalysisPage = () => {
       
       <TabPanel value={tabValue} index={2}>
         <Grid container spacing={3}>
-          <Grid item xs={12}>
+          <Grid item xs={12} md={3}>
             <Card>
-              <CardContent sx={{ textAlign: 'center', py: 8 }}>
-                <Typography variant="h4" gutterBottom>
-                  Coming Soon!
+              <CardHeader title="User Clustering" />
+              <CardContent>
+                <Typography variant="body1" paragraph>
+                  This visualization groups users into clusters based on their pick strategies.
                 </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  We're working on an exciting new feature to analyze user clusters and pick strategies.
-                  Stay tuned for updates!
+                
+                <Box sx={{ mb: 3 }}>
+                  <Typography id="cluster-slider" gutterBottom>
+                    Number of Clusters: {clusterCount}
+                  </Typography>
+                  <Slider
+                    aria-labelledby="cluster-slider"
+                    value={clusterCount}
+                    onChange={(_, newValue) => setClusterCount(newValue as number)}
+                    step={1}
+                    marks
+                    min={2}
+                    max={5}
+                    valueLabelDisplay="auto"
+                  />
+                </Box>
+                
+                <Typography variant="subtitle2">
+                  X-Axis: Chalk Score %
                 </Typography>
+                <Typography variant="subtitle2">
+                  Y-Axis: Herding Score %
+                </Typography>
+                
+                <Box sx={{ bgcolor: 'info.light', p: 2, borderRadius: 1, mt: 2 }}>
+                  <Typography variant="subtitle2" color="info.contrastText" gutterBottom>
+                    About Clustering
+                  </Typography>
+                  <Typography variant="body2" color="info.contrastText">
+                    We use k-means clustering to group users based on their pick strategies.
+                    Users in the same cluster have similar approaches to making their picks.
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+            
+            <Card sx={{ mt: 3 }}>
+              <CardHeader title="Cluster Characteristics" />
+              <CardContent>
+                <Stack spacing={2} divider={<Divider />}>
+                  {clusterDescriptions.map(cluster => (
+                    <Box key={cluster.id}>
+                      <Typography variant="subtitle1" color="primary" gutterBottom>
+                        Cluster {cluster.id} ({cluster.size} users)
+                      </Typography>
+                      <Typography variant="body2" gutterBottom>
+                        {cluster.description}
+                      </Typography>
+                      <Typography variant="body2">
+                        Avg Chalk: {cluster.avgChalkScore !== undefined ? cluster.avgChalkScore.toFixed(1) : 'N/A'}%
+                      </Typography>
+                      <Typography variant="body2">
+                        Avg Herding: {cluster.avgHerdingScore !== undefined ? cluster.avgHerdingScore.toFixed(1) : 'N/A'}%
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} md={9}>
+            <Card>
+              <CardHeader title="Bracket Strategy Clusters" />
+              <CardContent>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Users clustered by their pick strategies (chalk vs. herding).
+                </Typography>
+                
+                <Paper sx={{ p: 2, height: 500 }}>
+                  {scatterData ? (
+                    <Scatter
+                      data={scatterData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                          x: {
+                            title: {
+                              display: true,
+                              text: 'Chalk Score % (Lower Seed Picks)'
+                            },
+                            min: 0,
+                            max: 100
+                          },
+                          y: {
+                            title: {
+                              display: true,
+                              text: 'Herding Score % (Popular Picks)'
+                            },
+                            beginAtZero: true,
+                            max: 100
+                          }
+                        },
+                        plugins: {
+                          tooltip: {
+                            callbacks: {
+                              label: function(context) {
+                                const user = context.raw;
+                                return [
+                                  `${user.username}`,
+                                  `Score: ${user.score}`,
+                                  `Chalk: ${user.x.toFixed(1)}%`,
+                                  `Herding: ${user.y.toFixed(1)}%`
+                                ];
+                              }
+                            }
+                          }
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                      <Typography>No data available</Typography>
+                    </Box>
+                  )}
+                </Paper>
               </CardContent>
             </Card>
           </Grid>

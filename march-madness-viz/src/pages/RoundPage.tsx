@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -58,6 +58,26 @@ function getValidRoundId(roundId: string): string {
   return validRounds.includes(roundId) ? roundId : 'ROUND_64';
 }
 
+// Helper to determine the most recent round
+function getMostRecentRound(gameResults: any[]): string {
+  if (!gameResults || gameResults.length === 0) return 'ROUND_64';
+  
+  // Find the game with the highest ID that has been played
+  const maxGameId = Math.max(...gameResults.map(game => parseInt(game.gameId)));
+  
+  // Map game ID to round
+  if (maxGameId <= 32) return 'ROUND_64';
+  if (maxGameId <= 48) return 'ROUND_32';
+  if (maxGameId <= 56) return 'SWEET_16';
+  if (maxGameId <= 60) return 'ELITE_8';
+  if (maxGameId <= 62) return 'FINAL_FOUR';
+  if (maxGameId <= 63) return 'CHAMPIONSHIP';
+
+  console.log('maxGameId', maxGameId);
+  
+  return 'ROUND_64'; // Default fallback
+}
+
 const RoundPage = () => {
   const { roundId } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
@@ -66,6 +86,14 @@ const RoundPage = () => {
   
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
+  
+  // Redirect to most recent round if no roundId is provided
+  useEffect(() => {
+    if (roundId == 'default') {
+      const mostRecentRound = getMostRecentRound(gameResults);
+      navigate(`/rounds/${mostRecentRound}`, { replace: true });
+    }
+  }, [roundId, gameResults, navigate]);
   
   if (loading) {
     return (

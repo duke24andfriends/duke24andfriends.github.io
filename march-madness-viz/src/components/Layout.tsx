@@ -22,7 +22,7 @@ const Links = [
   { name: 'Home', path: '/' },
   { name: 'Leaderboard', path: '/leaderboard' },
   { name: 'Bracket Machine', path: '/bracket-machine' },
-  { name: 'Rounds', path: '/rounds/ROUND_64' },
+  { name: 'Rounds', path: '/rounds/default' },
   { name: 'Teams', path: '/teams/DUKE' },
   { name: 'Pool Analysis', path: '/pool-analysis' },
 ];
