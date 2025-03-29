@@ -21,7 +21,9 @@ import {
   MenuItem,
   FormControlLabel,
   Switch,
-  Link
+  Link,
+  Tab,
+  Tabs
 } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import {
@@ -76,6 +78,32 @@ function getMostRecentRound(gameResults: any[]): string {
   return 'ROUND_64'; // Default fallback
 }
 
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`round-tabpanel-${index}`}
+      aria-labelledby={`round-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
 const RoundPage = () => {
   const { roundId } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
@@ -84,6 +112,7 @@ const RoundPage = () => {
   
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
+  const [viewMode, setViewMode] = useState<'game' | 'user'>('game');
   
   if (loading) {
     return (
@@ -269,6 +298,105 @@ const RoundPage = () => {
     }
   };
   
+  // Calculate user accuracy distribution for this round
+  const accuracyDistribution = useMemo(() => {
+    if (!bracketData || !currentRoundGames || !gameResults) return null;
+    
+    // Map to store how many users got 0, 1, 2, ... games correct
+    const distribution: Record<number, number> = {};
+    // Map to track correct picks by user
+    const userCorrectPicks: Record<string, number> = {};
+    
+    // Initialize distribution
+    for (let i = 0; i <= currentRoundGames.length; i++) {
+      distribution[i] = 0;
+    }
+    
+    // Process each game in the round
+    currentRoundGames.forEach(gameId => {
+      const game = bracketData.games[gameId];
+      if (!game) return;
+      
+      const gameWinner = gameWinners.find(winner => winner.gameId === gameId);
+      if (!gameWinner || !gameWinner.winner) return; // Skip if game not completed
+      
+      // Check each user's pick for this game
+      Object.entries(game.picks).forEach(([username, pick]) => {
+        if (!userCorrectPicks[username]) {
+          userCorrectPicks[username] = 0;
+        }
+        
+        if (pick === gameWinner.winner) {
+          userCorrectPicks[username]++;
+        }
+      });
+    });
+    
+    // Populate distribution
+    Object.values(userCorrectPicks).forEach(correctCount => {
+      distribution[correctCount]++;
+    });
+    
+    return distribution;
+  }, [bracketData, currentRoundGames, gameWinners]);
+  
+  // Create distribution chart data
+  const distributionChartData = useMemo(() => {
+    if (!accuracyDistribution) return null;
+    
+    const labels = Object.keys(accuracyDistribution);
+    const data = Object.values(accuracyDistribution);
+    
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Number of Users',
+          data,
+          backgroundColor: Array(labels.length).fill(theme.palette.primary.main),
+          borderColor: Array(labels.length).fill(theme.palette.primary.dark),
+          borderWidth: 1,
+        }
+      ]
+    };
+  }, [accuracyDistribution, theme]);
+  
+  const distributionChartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: `Distribution of Correct Picks in ${displayRoundName(currentRoundId)}`,
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const value = context.raw;
+            return `${value} user${value !== 1 ? 's' : ''}`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: 'Number of Users'
+        }
+      },
+      x: {
+        title: {
+          display: true,
+          text: 'Number of Correct Picks'
+        }
+      }
+    }
+  };
+  
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -321,31 +449,72 @@ const RoundPage = () => {
                     {completedGames.length} / {currentRoundGames.length}
                   </Typography>
                 </Box>
+
+                <Box>
+                  <Typography variant="subtitle1">View Type</Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Button 
+                      variant={viewMode === 'game' ? "contained" : "outlined"}
+                      size="small"
+                      onClick={() => setViewMode('game')}
+                    >
+                      Game Accuracy
+                    </Button>
+                    <Button 
+                      variant={viewMode === 'user' ? "contained" : "outlined"}
+                      size="small"
+                      onClick={() => setViewMode('user')}
+                    >
+                      User Distribution
+                    </Button>
+                  </Stack>
+                </Box>
               </Stack>
             </CardContent>
           </Card>
         </Grid>
         
-        {/* Game Accuracy Chart */}
+        {/* Chart Area */}
         <Grid item xs={12} md={8}>
           <Card>
             <CardHeader 
-              title="Game Pick Accuracy" 
-              subheader={`Click on a bar to see detailed pick distribution for that game`}
+              title={viewMode === 'game' ? "Game Pick Accuracy" : "User Accuracy Distribution"}
+              subheader={viewMode === 'game' ? "Click on a bar to see detailed pick distribution for that game" : "Distribution of correct picks per user"}
             />
             <CardContent>
-              <Box sx={{ height: 300 }}>
-                <Bar
-                  data={chartData}
-                  options={chartOptions}
-                />
+              <Box sx={{ height: 400 }}>
+                {viewMode === 'game' ? (
+                  <Bar 
+                    data={chartData} 
+                    options={chartOptions} 
+                  />
+                ) : (
+                  distributionChartData ? (
+                    <Bar 
+                      data={distributionChartData} 
+                      options={distributionChartOptions} 
+                    />
+                  ) : (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                      <Typography variant="body1" color="text.secondary">
+                        No data available for this round
+                      </Typography>
+                    </Box>
+                  )
+                )}
               </Box>
+              
+              {viewMode === 'user' && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+                  This chart shows how many users correctly picked 0, 1, 2, etc. games in {displayRoundName(currentRoundId)}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
         
         {/* Selected Game Details */}
-        {selectedGame && (
+        {selectedGame && viewMode === 'game' && (
           <Grid item xs={12}>
             <Card>
               <CardHeader 

@@ -466,16 +466,19 @@ const Leaderboard = () => {
   
   const handleSort = (key: 'score' | 'maxPossible' | 'roundScore', round?: string) => {
     setSortConfig(prev => {
-      // Toggle direction if clicking the same column
-      const newDirection = (prev.key === key && 
-                            prev.round === round && 
-                            prev.direction === 'ascending') 
-                          ? 'descending' 
-                          : 'ascending';
+      // If it's a new column, default to descending
+      if (prev.key !== key || prev.round !== round) {
+        return {
+          key,
+          direction: 'descending',
+          round
+        };
+      }
       
+      // If it's the same column, toggle direction
       return {
         key,
-        direction: newDirection,
+        direction: prev.direction === 'descending' ? 'ascending' : 'descending',
         round
       };
     });
