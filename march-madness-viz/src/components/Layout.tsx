@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   AppBar,
   Box,
@@ -55,7 +55,6 @@ const NavLink = ({ children, path }: { children: React.ReactNode, path: string }
 
 const Layout = ({ children, year }: { children: React.ReactNode; year: string }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const location = useLocation();
   const { gameResults } = useData();
 
   // Calculate most recent round
@@ -66,7 +65,6 @@ const Layout = ({ children, year }: { children: React.ReactNode; year: string })
   const navItems = [
     { name: 'Home', path: getYearPath(year, '/') },
     { name: 'Leaderboard', path: getYearPath(year, '/leaderboard') },
-    { name: 'Bracket Machine', path: getYearPath(year, '/bracket-machine') },
     { name: 'Rounds', path: getYearPath(year, `/rounds/${mostRecentRound}`) },
     { name: 'Teams', path: getYearPath(year, '/teams/DUKE') },
     { name: 'Pool Analysis', path: getYearPath(year, '/pool-analysis') },

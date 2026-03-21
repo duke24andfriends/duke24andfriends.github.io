@@ -5,7 +5,6 @@ import { DataProvider } from './context/DataContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Leaderboard from './pages/Leaderboard';
-import BracketMachineTemp from './pages/BracketMachineTemp';
 import RoundPage from './pages/RoundPage';
 import TeamPage from './pages/TeamPage';
 import UserPage from './pages/UserPage';
@@ -40,7 +39,6 @@ function App() {
           <Route path="/:year/*" element={<YearShell />}>
             <Route index element={<Home />} />
             <Route path="leaderboard" element={<Leaderboard />} />
-            <Route path="bracket-machine" element={<BracketMachineTemp />} />
             <Route path="rounds/:roundId" element={<RoundPage />} />
             <Route path="teams/:teamCode" element={<TeamPage />} />
             <Route path="users/:username" element={<UserPage />} />

@@ -79,20 +79,20 @@ const Home = () => {
 
         <Grid item xs={12} md={6} lg={4}>
           <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <CardHeader title="Bracket Machine" />
+            <CardHeader title="Pool Analysis" />
             <CardContent sx={{ flexGrow: 1 }}>
               <Typography variant="body1">
-                Predict future game outcomes and see how they would affect the standings. Set probabilities for each game.
+                Compare bracket similarity, user clusters, and pick strategy trends across the pool.
               </Typography>
             </CardContent>
             <CardActions>
               <Button 
                 component={RouterLink} 
-                  to={yearPath('/bracket-machine')}
+                  to={yearPath('/pool-analysis')}
                 variant="contained" 
                 color="primary"
               >
-                Use Bracket Machine
+                View Pool Analysis
               </Button>
             </CardActions>
           </Card>
