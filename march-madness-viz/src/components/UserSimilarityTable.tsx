@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useYearPath } from '../utils/yearRouting';
 
 export interface UserSimilarity {
   username: string;
@@ -37,6 +38,7 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
 }) => {
   // Access user name mappings from context
   const { userNameMapping } = useData();
+  const { yearPath } = useYearPath();
   
   // State for managing sorting
   const [sortConfig, setSortConfig] = useState<{
@@ -155,7 +157,7 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
               return (
                 <TableRow key={user.username}>
                   <TableCell>
-                    <Link component={RouterLink} to={`/users/${user.username}`}>
+                    <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
                       {user.username}
                     </Link>
                   </TableCell>

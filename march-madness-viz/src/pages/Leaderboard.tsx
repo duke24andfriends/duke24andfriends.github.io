@@ -52,6 +52,7 @@ import {
 } from 'chart.js';
 import { useData } from '../context/DataContext';
 import { ROUNDS, UserScore } from '../types';
+import { useYearPath } from '../utils/yearRouting';
 
 // Register Chart.js components
 ChartJS.register(
@@ -105,6 +106,7 @@ function getRoundDisplayName(roundKey: string): string {
 const Leaderboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { yearPath } = useYearPath();
   const { userScores, filteredUsernames, setFilteredUsernames, leaderboardTrend, bracketData, loading, error, gameResults } = useData();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -212,7 +214,7 @@ const Leaderboard = () => {
       setFilteredUsernames([]);
       
       // Update URL to remove the filter
-      navigate('/leaderboard', { replace: true });
+      navigate(yearPath('/leaderboard'), { replace: true });
     } else if (selectedUsers.length > 0) {
       // Apply filter
       setFilteredUsernames(selectedUsers);
@@ -220,7 +222,7 @@ const Leaderboard = () => {
       // Update URL with filtered users
       const queryParams = new URLSearchParams();
       queryParams.set('users', selectedUsers.join(','));
-      navigate(`/leaderboard?${queryParams.toString()}`, { replace: true });
+      navigate(`${yearPath('/leaderboard')}?${queryParams.toString()}`, { replace: true });
     }
   };
   
@@ -695,7 +697,7 @@ const Leaderboard = () => {
                       <TableCell>
                         <Button 
                           component={RouterLink} 
-                          to={`/users/${user.username}`}
+                          to={yearPath(`/users/${user.username}`)}
                           size="small" 
                           sx={{ textTransform: 'none' }}
                         >
@@ -719,7 +721,7 @@ const Leaderboard = () => {
                           <TooltipComponent title={`${user.username}'s champion pick`}>
                             <Button 
                               component={RouterLink} 
-                              to={`/teams/${user.champion}`}
+                              to={yearPath(`/teams/${user.champion}`)}
                               size="small" 
                               variant="text"
                             >

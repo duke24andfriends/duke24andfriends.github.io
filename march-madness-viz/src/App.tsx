@@ -1,6 +1,6 @@
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
 import { DataProvider } from './context/DataContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -11,6 +11,7 @@ import TeamPage from './pages/TeamPage';
 import UserPage from './pages/UserPage';
 import GamePage from './pages/GamePage';
 import PoolAnalysisPage from './pages/PoolAnalysisPage';
+import { DEFAULT_YEAR, isSupportedYear } from './utils/yearRouting';
 
 // Custom theme
 const theme = createTheme({
@@ -33,23 +34,39 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <DataProvider>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/bracket-machine" element={<BracketMachineTemp />} />
-              <Route path="/rounds/:roundId" element={<RoundPage />} />
-              <Route path="/teams/:teamCode" element={<TeamPage />} />
-              <Route path="/users/:username" element={<UserPage />} />
-              <Route path="/games/:gameId" element={<GamePage />} />
-              <Route path="/pool-analysis" element={<PoolAnalysisPage />} />
-            </Routes>
-          </Layout>
-        </Router>
-      </DataProvider>
+      <Router basename={import.meta.env.BASE_URL}>
+        <Routes>
+          <Route path="/" element={<Navigate to={`/${DEFAULT_YEAR}`} replace />} />
+          <Route path="/:year/*" element={<YearShell />}>
+            <Route index element={<Home />} />
+            <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="bracket-machine" element={<BracketMachineTemp />} />
+            <Route path="rounds/:roundId" element={<RoundPage />} />
+            <Route path="teams/:teamCode" element={<TeamPage />} />
+            <Route path="users/:username" element={<UserPage />} />
+            <Route path="games/:gameId" element={<GamePage />} />
+            <Route path="pool-analysis" element={<PoolAnalysisPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to={`/${DEFAULT_YEAR}`} replace />} />
+        </Routes>
+      </Router>
     </ThemeProvider>
+  );
+}
+
+function YearShell() {
+  const { year } = useParams();
+
+  if (!isSupportedYear(year)) {
+    return <Navigate to={`/${DEFAULT_YEAR}`} replace />;
+  }
+
+  return (
+    <DataProvider year={year}>
+      <Layout year={year}>
+        <Outlet />
+      </Layout>
+    </DataProvider>
   );
 }
 

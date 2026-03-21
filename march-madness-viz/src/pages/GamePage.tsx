@@ -38,6 +38,7 @@ import {
 } from 'chart.js';
 import { useData } from '../context/DataContext';
 import { ROUNDS, getRoundNameFromGameId, getPointsForGame } from '../types';
+import { useYearPath } from '../utils/yearRouting';
 
 // Register Chart.js components
 ChartJS.register(
@@ -57,6 +58,7 @@ interface RouteParams {
 const GamePage = () => {
   const { gameId } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
+  const { yearPath } = useYearPath();
   const [searchTerm, setSearchTerm] = React.useState('');
   const [showAllTeams, setShowAllTeams] = useState(false);
   const { 
@@ -249,7 +251,7 @@ const GamePage = () => {
         <Typography variant="body1" sx={{ mt: 2, mb: 4 }}>
           {error || `Game ${gameId} could not be found.`}
         </Typography>
-        <Button component={RouterLink} to="/" variant="contained">
+        <Button component={RouterLink} to={yearPath('/')} variant="contained">
           Return to Home
         </Button>
       </Box>
@@ -477,7 +479,7 @@ const GamePage = () => {
                               <TableCell>
                                 <Link 
                                   component={RouterLink} 
-                                  to={`/users/${username}`}
+                                  to={yearPath(`/users/${username}`)}
                                   sx={{ textDecoration: 'none' }}
                                 >
                                   {username}
@@ -530,7 +532,7 @@ const GamePage = () => {
                               <TableCell>
                                 <Link 
                                   component={RouterLink} 
-                                  to={`/users/${username}`}
+                                  to={yearPath(`/users/${username}`)}
                                   sx={{ textDecoration: 'none' }}
                                 >
                                   {username}
@@ -580,7 +582,7 @@ const GamePage = () => {
                                 <TableCell>
                                   <Link 
                                     component={RouterLink} 
-                                    to={`/users/${username}`}
+                                    to={yearPath(`/users/${username}`)}
                                     sx={{ textDecoration: 'none' }}
                                   >
                                     {username}

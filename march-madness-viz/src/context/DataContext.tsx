@@ -23,9 +23,10 @@ const DataContext = createContext<DataContextProps | undefined>(undefined);
 
 interface DataProviderProps {
   children: React.ReactNode;
+  year: string;
 }
 
-export const DataProvider = ({ children }: DataProviderProps) => {
+export const DataProvider = ({ children, year }: DataProviderProps) => {
   const [bracketData, setBracketData] = useState<BracketData | null>(null);
   const [gameWinners, setGameWinners] = useState<GameWinner[]>([]);
   const [gameResults, setGameResults] = useState<GameResult[]>([]);
@@ -51,23 +52,37 @@ export const DataProvider = ({ children }: DataProviderProps) => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
-        // Fetch bracket data
-        const bracketResponse = await fetch('/data/duke24.json');
-        const bracketData: BracketData = await bracketResponse.json();
+
+        const readTextFile = async (path: string) => {
+          const response = await fetch(path);
+          if (!response.ok) {
+            throw new Error(`Failed to load ${path} (${response.status})`);
+          }
+          return response.text();
+        };
+
+        const readJsonFile = async <T,>(path: string) => {
+          const response = await fetch(path);
+          if (!response.ok) {
+            throw new Error(`Failed to load ${path} (${response.status})`);
+          }
+          return response.json() as Promise<T>;
+        };
+
+        // Fetch year-specific bracket data
+        const bracketResponse = await readJsonFile<BracketData>(`${import.meta.env.BASE_URL}data/${year}/duke24.json`);
+        const bracketData: BracketData = bracketResponse;
 
         console.log(bracketData.metadata.total_brackets)
 
         const totalBrackets = bracketData.metadata.total_brackets;
         
         // Fetch game results with seed information
-        const resultsResponse = await fetch('/data/game_results_with_seed.csv');
-        const resultsCSV = await resultsResponse.text();
+        const resultsCSV = await readTextFile(`${import.meta.env.BASE_URL}data/${year}/game_results_with_seed.csv`);
         const gameResults = parseGameResults(resultsCSV);
         
         // Fetch user to name mapping
-        const userNameMappingResponse = await fetch('/data/user_to_name_mapping.csv');
-        const userNameMappingCSV = await userNameMappingResponse.text();
+        const userNameMappingCSV = await readTextFile(`${import.meta.env.BASE_URL}data/${year}/user_to_name_mapping.csv`);
         const userNameMappings = parseUserNameMapping(userNameMappingCSV);
         
         // Convert user mapping array to record for easy lookup
@@ -250,14 +265,14 @@ export const DataProvider = ({ children }: DataProviderProps) => {
         setError(null);
       } catch (err) {
         console.error('Error loading data:', err);
-        setError('Failed to load bracket data. Please try again later.');
+        setError(`Failed to load ${year} bracket data. Please try again later.`);
       } finally {
         setLoading(false);
       }
     };
     
     fetchData();
-  }, []);
+  }, [year]);
   
   // Recalculate user scores when hypothetical winners change
   useEffect(() => {

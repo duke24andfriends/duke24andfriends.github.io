@@ -42,6 +42,7 @@ import {
 import { useData } from '../context/DataContext';
 import { ROUNDS } from '../types';
 import { getOpponent } from '../utils/dataProcessing';
+import { useYearPath } from '../utils/yearRouting';
 
 // Register Chart.js components
 ChartJS.register(
@@ -64,6 +65,7 @@ interface RouteParams {
 const TeamPage = () => {
   const { teamCode } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
+  const { yearPath } = useYearPath();
   const { teamConfidence, gameWinners, gameResults, bracketData, loading, error } = useData();
   
   // State for toggling between percentage and count
@@ -275,7 +277,7 @@ const TeamPage = () => {
         <FormControl sx={{ minWidth: 180 }}>
           <Select 
             value={validTeamCode}
-            onChange={(e) => navigate(`/teams/${e.target.value}`)}
+            onChange={(e) => navigate(yearPath(`/teams/${e.target.value}`))}
             size="small"
           >
             {allTeams.map(team => (
@@ -383,13 +385,13 @@ const TeamPage = () => {
                                   size="small"
                                   color="primary"
                                   component={RouterLink}
-                                  to={`/games/${win.gameId}`}
+                                  to={yearPath(`/games/${win.gameId}`)}
                                 >
                                   Game {win.gameId}
                                 </Button>
                               </TableCell>
                               <TableCell>
-                                <Link component={RouterLink} to={`/teams/${opponent}`}>
+                                <Link component={RouterLink} to={yearPath(`/teams/${opponent}`)}>
                                   {opponent}
                                 </Link>
                                 {opponentSeed && (

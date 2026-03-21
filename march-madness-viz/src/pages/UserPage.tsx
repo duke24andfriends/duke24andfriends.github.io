@@ -35,6 +35,7 @@ import { useData } from '../context/DataContext';
 import { ROUNDS, getRoundNameFromGameId, getPointsForGame } from '../types';
 import { getOpponent } from '../utils/dataProcessing';
 import UserSimilarityTable, { UserSimilarity } from '../components/UserSimilarityTable';
+import { useYearPath } from '../utils/yearRouting';
 
 // Register Chart.js components
 ChartJS.register(
@@ -54,6 +55,7 @@ interface RouteParams {
 const UserPage = () => {
   const { username } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
+  const { yearPath } = useYearPath();
   const { 
     bracketData, 
     gameWinners, 
@@ -524,7 +526,7 @@ const UserPage = () => {
         <Typography variant="body1" sx={{ mt: 2, mb: 4 }}>
           {error || `The user "${username}" could not be found.`}
         </Typography>
-        <Button component={Link} to="/leaderboard" variant="contained">
+        <Button component={Link} to={yearPath('/leaderboard')} variant="contained">
           Return to Leaderboard
         </Button>
       </Box>
@@ -754,7 +756,7 @@ const UserPage = () => {
           <Box sx={{ mt: 2, textAlign: 'right' }}>
             <Button 
               component={RouterLink}
-              to="/pool-analysis"
+              to={yearPath('/pool-analysis')}
               size="small"
               color="primary"
             >
@@ -779,7 +781,7 @@ const UserPage = () => {
           <Box sx={{ mt: 2, textAlign: 'right' }}>
             <Button 
               component={RouterLink}
-              to={`/pool-analysis?user=${username}`}
+              to={yearPath(`/pool-analysis?user=${username}`)}
               size="small"
               color="primary"
             >
@@ -811,7 +813,7 @@ const UserPage = () => {
                       <Button
                         size="small"
                         component={Link}
-                        to={`/games/${pick.gameId}`}
+                        to={yearPath(`/games/${pick.gameId}`)}
                       >
                         Game {pick.gameId}
                       </Button>
@@ -822,7 +824,7 @@ const UserPage = () => {
                         <Button
                           size="small"
                           component={Link}
-                          to={`/teams/${pick.pick}`}
+                          to={yearPath(`/teams/${pick.pick}`)}
                           color={pick.isEliminated ? "error" : "primary"}
                           sx={{
                             textDecoration: pick.isEliminated && !pick.isCompleted ? 'line-through' : 'none',
@@ -840,7 +842,7 @@ const UserPage = () => {
                         <Button
                           size="small"
                           component={Link}
-                          to={`/teams/${pick.opponent}`}
+                          to={yearPath(`/teams/${pick.opponent}`)}
                         >
                           {pick.opponent}
                         </Button>

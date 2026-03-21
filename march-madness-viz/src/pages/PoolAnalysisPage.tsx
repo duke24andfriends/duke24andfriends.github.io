@@ -29,6 +29,7 @@ import {
 } from '@mui/material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useYearPath } from '../utils/yearRouting';
 import { Scatter } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -100,6 +101,7 @@ const PoolAnalysisPage = () => {
   } = useData();
   
   const location = useLocation();
+  const { yearPath } = useYearPath();
   const [tabValue, setTabValue] = useState(0);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [clusterCount, setClusterCount] = useState<number>(3);
@@ -704,7 +706,7 @@ const PoolAnalysisPage = () => {
                       .map(user => (
                         <TableRow key={user.username}>
                           <TableCell>
-                            <Link component={RouterLink} to={`/users/${user.username}`}>
+                            <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
                               {user.username}
                             </Link>
                           </TableCell>
@@ -735,7 +737,7 @@ const PoolAnalysisPage = () => {
                       .map(user => (
                         <TableRow key={user.username}>
                           <TableCell>
-                            <Link component={RouterLink} to={`/users/${user.username}`}>
+                            <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
                               {user.username}
                             </Link>
                           </TableCell>
@@ -766,7 +768,7 @@ const PoolAnalysisPage = () => {
                       .map(user => (
                         <TableRow key={user.username}>
                           <TableCell>
-                            <Link component={RouterLink} to={`/users/${user.username}`}>
+                            <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
                               {user.username}
                             </Link>
                           </TableCell>

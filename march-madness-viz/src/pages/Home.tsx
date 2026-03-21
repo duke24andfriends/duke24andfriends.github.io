@@ -14,9 +14,11 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useYearPath } from '../utils/yearRouting';
 
 const Home = () => {
   const { loading, error, bracketData } = useData();
+  const { yearPath } = useYearPath();
 
   if (loading) {
     return (
@@ -65,7 +67,7 @@ const Home = () => {
             <CardActions>
               <Button 
                 component={RouterLink} 
-                to="/leaderboard" 
+                  to={yearPath('/leaderboard')}
                 variant="contained" 
                 color="primary"
               >
@@ -86,7 +88,7 @@ const Home = () => {
             <CardActions>
               <Button 
                 component={RouterLink} 
-                to="/bracket-machine" 
+                  to={yearPath('/bracket-machine')}
                 variant="contained" 
                 color="primary"
               >
@@ -107,7 +109,7 @@ const Home = () => {
             <CardActions>
               <Button 
                 component={RouterLink} 
-                to="/rounds/ROUND_64" 
+                  to={yearPath('/rounds/ROUND_64')}
                 variant="contained" 
                 color="primary"
               >
@@ -128,7 +130,7 @@ const Home = () => {
             <CardActions>
               <Button 
                 component={RouterLink} 
-                to="/teams/DUKE" 
+                  to={yearPath('/teams/DUKE')}
                 variant="contained" 
                 color="primary"
               >

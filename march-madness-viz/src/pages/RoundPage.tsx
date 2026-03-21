@@ -39,6 +39,7 @@ import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useTheme } from '@mui/material/styles';
 import { ROUNDS } from '../types';
+import { useYearPath } from '../utils/yearRouting';
 
 // Register ChartJS components
 ChartJS.register(
@@ -107,6 +108,7 @@ function TabPanel(props: TabPanelProps) {
 const RoundPage = () => {
   const { roundId } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
+  const { yearPath } = useYearPath();
   const { bracketData, gameWinners, gameResults, roundAccuracy, loading, error } = useData();
   const theme = useTheme();
   
@@ -407,7 +409,7 @@ const RoundPage = () => {
         <Typography variant="body1">Select Round:</Typography>
         <Select 
           value={currentRoundId}
-          onChange={(e) => navigate(`/rounds/${e.target.value}`)}
+          onChange={(e) => navigate(yearPath(`/rounds/${e.target.value}`))}
           size="small"
           sx={{ minWidth: 120 }}
         >
@@ -523,7 +525,7 @@ const RoundPage = () => {
                   <Button
                     size="small"
                     component={RouterLink}
-                    to={`/games/${selectedGame}`}
+                    to={yearPath(`/games/${selectedGame}`)}
                   >
                     View Game Page
                   </Button>
@@ -549,7 +551,7 @@ const RoundPage = () => {
                               <Stack direction="row" justifyContent="space-between" alignItems="center">
                                 <Box>
                                   <Stack direction="row" spacing={1} alignItems="center">
-                                    <Link component={RouterLink} to={`/teams/${team}`}>
+                                    <Link component={RouterLink} to={yearPath(`/teams/${team}`)}>
                                       <Typography variant="h6">{team}</Typography>
                                     </Link>
                                     {seed && (
@@ -608,7 +610,7 @@ const RoundPage = () => {
                               size="small"
                               color="primary"
                               component={RouterLink}
-                              to={`/games/${game.gameId}`}
+                              to={yearPath(`/games/${game.gameId}`)}
                             >
                               Game {game.gameId}
                             </Button>
@@ -616,11 +618,11 @@ const RoundPage = () => {
                           <TableCell>
                             {(
                               <Stack direction="row" spacing={1}>
-                                <Link component={RouterLink} to={`/teams/${game.completed ? game.winner : game.teams[0]}`}>
+                                <Link component={RouterLink} to={yearPath(`/teams/${game.completed ? game.winner : game.teams[0]}`)}>
                                 {game.completed ? game.winner : game.teams[0]}
                                 </Link>
                                 <Typography>vs</Typography>
-                                <Link component={RouterLink} to={`/teams/${game.completed ? game.loser : game.teams[1]}`}>
+                                <Link component={RouterLink} to={yearPath(`/teams/${game.completed ? game.loser : game.teams[1]}`)}>
                                 {game.completed ? game.loser : game.teams[1]}
                                 </Link>
                               </Stack>
@@ -641,7 +643,7 @@ const RoundPage = () => {
                                   label={`${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}`} 
                                   size="small"
                                   component={RouterLink}
-                                  to={`/teams/${game.winner}`}
+                                  to={yearPath(`/teams/${game.winner}`)}
                                   clickable
                                 />
                                 <Typography>beat</Typography>
@@ -650,7 +652,7 @@ const RoundPage = () => {
                                   label={`${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}`} 
                                   size="small"
                                   component={RouterLink}
-                                  to={`/teams/${game.loser}`}
+                                  to={yearPath(`/teams/${game.loser}`)}
                                   clickable
                                 />
                               </Stack>

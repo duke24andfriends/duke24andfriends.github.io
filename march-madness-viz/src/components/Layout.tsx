@@ -18,6 +18,7 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { useData } from '../context/DataContext';
+import { AVAILABLE_YEARS, getYearPath } from '../utils/yearRouting';
 
 // Helper to determine the most recent round
 function getMostRecentRound(gameResults: any[]): string {
@@ -37,15 +38,6 @@ function getMostRecentRound(gameResults: any[]): string {
   return 'ROUND_64'; // Default fallback
 }
 
-const Links = [
-  { name: 'Home', path: '/' },
-  { name: 'Leaderboard', path: '/leaderboard' },
-  { name: 'Bracket Machine', path: '/bracket-machine' },
-  { name: 'Rounds', path: '/rounds/default' },
-  { name: 'Teams', path: '/teams/DUKE' },
-  { name: 'Pool Analysis', path: '/pool-analysis' },
-];
-
 const NavLink = ({ children, path }: { children: React.ReactNode, path: string }) => (
   <Button
     component={RouterLink}
@@ -61,7 +53,7 @@ const NavLink = ({ children, path }: { children: React.ReactNode, path: string }
   </Button>
 );
 
-const Layout = ({ children }: { children: React.ReactNode }) => {
+const Layout = ({ children, year }: { children: React.ReactNode; year: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const { gameResults } = useData();
@@ -72,12 +64,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [gameResults]);
   
   const navItems = [
-    { name: 'Home', path: '/' },
-    { name: 'Leaderboard', path: '/leaderboard' },
-    { name: 'Bracket Machine', path: '/bracket-machine' },
-    { name: 'Rounds', path: `/rounds/${mostRecentRound}` },
-    { name: 'Teams', path: '/teams/DUKE' },
-    { name: 'Pool Analysis', path: '/pool-analysis' },
+    { name: 'Home', path: getYearPath(year, '/') },
+    { name: 'Leaderboard', path: getYearPath(year, '/leaderboard') },
+    { name: 'Bracket Machine', path: getYearPath(year, '/bracket-machine') },
+    { name: 'Rounds', path: getYearPath(year, `/rounds/${mostRecentRound}`) },
+    { name: 'Teams', path: getYearPath(year, '/teams/DUKE') },
+    { name: 'Pool Analysis', path: getYearPath(year, '/pool-analysis') },
   ];
 
   const handleOpen = () => {
@@ -105,6 +97,20 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             March Madness Viz
           </Typography>
+          <Stack direction="row" spacing={1} sx={{ mr: 2 }}>
+            {AVAILABLE_YEARS.map((targetYear) => (
+              <Button
+                key={targetYear}
+                component={RouterLink}
+                to={getYearPath(targetYear, '/')}
+                variant={targetYear === year ? 'contained' : 'outlined'}
+                color="inherit"
+                size="small"
+              >
+                {targetYear}
+              </Button>
+            ))}
+          </Stack>
           <Stack direction="row" spacing={2} sx={{ display: { xs: 'none', md: 'flex' } }}>
             {navItems.map((link) => (
               <NavLink key={link.name} path={link.path}>{link.name}</NavLink>
