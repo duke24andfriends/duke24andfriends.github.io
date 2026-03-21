@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   AppBar,
@@ -38,7 +38,7 @@ function getMostRecentRound(gameResults: any[]): string {
   return 'ROUND_64'; // Default fallback
 }
 
-const NavLink = ({ children, path }: { children: React.ReactNode, path: string }) => (
+const NavLink = ({ children, path }: { children: any; path: string }) => (
   <Button
     component={RouterLink}
     to={path}
@@ -53,7 +53,7 @@ const NavLink = ({ children, path }: { children: React.ReactNode, path: string }
   </Button>
 );
 
-const Layout = ({ children, year }: { children: React.ReactNode; year: string }) => {
+const Layout = ({ children, year }: { children: any; year: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { gameResults } = useData();
 
@@ -92,8 +92,17 @@ const Layout = ({ children, year }: { children: React.ReactNode; year: string })
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            March Madness Viz
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{ flexGrow: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              MM Viz
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              March Madness Viz
+            </Box>
           </Typography>
           <Stack direction="row" spacing={1} sx={{ mr: 2 }}>
             {AVAILABLE_YEARS.map((targetYear) => (
