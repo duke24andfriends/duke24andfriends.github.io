@@ -17,12 +17,12 @@ import {
   TableRow,
   TableCell,
   FormControl,
-  InputLabel,
   Chip,
   Button,
   FormControlLabel,
   Switch,
-  Link
+  Link,
+  Paper
 } from '@mui/material';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { Bar, Radar } from 'react-chartjs-2';
@@ -66,7 +66,7 @@ const TeamPage = () => {
   const { teamCode } = useParams<keyof RouteParams>() as RouteParams;
   const navigate = useNavigate();
   const { yearPath } = useYearPath();
-  const { teamConfidence, gameWinners, gameResults, bracketData, loading, error } = useData();
+  const { teamConfidence, gameWinners, gameResults, bracketData, userScores, loading, error } = useData();
   
   // State for toggling between percentage and count
   const [showCounts, setShowCounts] = useState(false);
@@ -160,8 +160,6 @@ const TeamPage = () => {
     if (!bracketData) return { wins: [], eliminated: false, eliminationRound: null };
     
     const wins = gameWinners.filter(game => game.winner === validTeamCode);
-    const gameIds = wins.map(win => win.gameId);
-    
     // Check if eliminated
     let eliminated = false;
     let eliminationRound = null;
@@ -221,6 +219,63 @@ const TeamPage = () => {
       };
     }),
   };
+
+  const getDisplayName = (username: string) => {
+    const scoreData = userScores.find((user: { username: string; fullName?: string }) => user.username === username);
+    return scoreData?.fullName || username;
+  };
+
+  const teamPickDepthByRound: Array<{ roundName: string; users: string[] }> = useMemo(() => {
+    if (!bracketData) return [];
+
+    const roundBuckets = [
+      'Round of 64',
+      'Round of 32',
+      'Sweet 16',
+      'Elite 8',
+      'Final Four',
+      'Championship',
+      'Champion'
+    ];
+
+    const gameToDepth = (gameId: string) => {
+      const id = Number(gameId);
+      if (id >= 1 && id <= 32) return 1; // picked to reach Round of 32
+      if (id >= 33 && id <= 48) return 2; // picked to reach Sweet 16
+      if (id >= 49 && id <= 56) return 3; // picked to reach Elite 8
+      if (id >= 57 && id <= 60) return 4; // picked to reach Final Four
+      if (id === 61 || id === 62) return 5; // picked to reach Championship
+      if (id === 63) return 6; // picked as Champion
+      return 0;
+    };
+
+    const allUsernames = userScores.length > 0
+      ? userScores.map((user: { username: string }) => user.username)
+      : Object.keys(bracketData.games['1']?.picks || {});
+
+    const maxDepthByUser = new Map<string, number>();
+    allUsernames.forEach((username: string) => maxDepthByUser.set(username, 0));
+
+    Object.entries(bracketData.games as Record<string, { picks: Record<string, string> }>).forEach(([gameId, game]) => {
+      Object.entries(game.picks).forEach(([username, pick]: [string, string]) => {
+        if (pick !== validTeamCode) return;
+        const depth = gameToDepth(gameId);
+        const current = maxDepthByUser.get(username) ?? 0;
+        if (depth > current) {
+          maxDepthByUser.set(username, depth);
+        }
+      });
+    });
+
+    return roundBuckets.map((roundName, depth): { roundName: string; users: string[] } => {
+      const users = Array.from(maxDepthByUser.entries())
+        .filter(([_, maxDepth]) => maxDepth === depth)
+        .map(([username]) => username)
+        .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)));
+
+      return { roundName, users };
+    });
+  }, [bracketData, userScores, validTeamCode]);
   
   // Helper to find round name from game ID - same as in old version
   function getRoundFromGameId(gameId: string): string {
@@ -444,6 +499,46 @@ const TeamPage = () => {
           <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
             Comparing {validTeamCode} with other top teams by pick {showCounts ? 'count' : 'percentage'} at each round
           </Typography>
+        </CardContent>
+      </Card>
+
+      <Card sx={{ mt: 3 }}>
+        <CardHeader title={`How Far Brackets Picked ${validTeamCode}`} />
+        <CardContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Grouped by the furthest round each bracket picked {validTeamCode} to reach.
+          </Typography>
+          <Grid container spacing={2}>
+            {teamPickDepthByRound.map(({ roundName, users }) => (
+              <Grid item xs={12} md={6} key={roundName}>
+                <Paper sx={{ p: 2 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                    <Typography variant="h6">{roundName}</Typography>
+                    <Chip label={`${users.length} user${users.length === 1 ? '' : 's'}`} size="small" />
+                  </Stack>
+                  <Divider sx={{ mb: 1.5 }} />
+                  {users.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No brackets in this bucket.
+                    </Typography>
+                  ) : (
+                    <Stack spacing={0.5}>
+                      {users.map(username => (
+                        <Link
+                          key={username}
+                          component={RouterLink}
+                          to={yearPath(`/users/${username}`)}
+                          sx={{ textDecoration: 'none' }}
+                        >
+                          {getDisplayName(username)}
+                        </Link>
+                      ))}
+                    </Stack>
+                  )}
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
         </CardContent>
       </Card>
     </Box>
