@@ -16,10 +16,9 @@ import {
   Stack,
   Divider,
   Button,
-  Paper,
-  Link as RouterLink
+  Paper
 } from '@mui/material';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -526,7 +525,7 @@ const UserPage = () => {
         <Typography variant="body1" sx={{ mt: 2, mb: 4 }}>
           {error || `The user "${username}" could not be found.`}
         </Typography>
-        <Button component={Link} to={yearPath('/leaderboard')} variant="contained">
+        <Button component={RouterLink} to={yearPath('/leaderboard')} variant="contained">
           Return to Leaderboard
         </Button>
       </Box>
@@ -812,7 +811,7 @@ const UserPage = () => {
                     <TableCell>
                       <Button
                         size="small"
-                        component={Link}
+                        component={RouterLink}
                         to={yearPath(`/games/${pick.gameId}`)}
                       >
                         Game {pick.gameId}
@@ -823,7 +822,7 @@ const UserPage = () => {
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Button
                           size="small"
-                          component={Link}
+                          component={RouterLink}
                           to={yearPath(`/teams/${pick.pick}`)}
                           color={pick.isEliminated ? "error" : "primary"}
                           sx={{
@@ -841,7 +840,7 @@ const UserPage = () => {
                       {pick.opponent && (
                         <Button
                           size="small"
-                          component={Link}
+                          component={RouterLink}
                           to={yearPath(`/teams/${pick.opponent}`)}
                         >
                           {pick.opponent}
