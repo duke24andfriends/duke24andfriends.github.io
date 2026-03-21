@@ -25,8 +25,12 @@ import {
   Link,
   Tooltip,
   Divider,
-  Autocomplete
+  Autocomplete,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useYearPath } from '../utils/yearRouting';
@@ -68,7 +72,7 @@ function TabPanel(props: TabPanelProps) {
       {...other}
     >
       {value === index && (
-        <Box sx={{ py: 3 }}>
+        <Box sx={{ py: { xs: 1.5, sm: 3 } }}>
           {children}
         </Box>
       )}
@@ -534,11 +538,11 @@ const PoolAnalysisPage = () => {
         Pool Analysis
       </Typography>
       
-      <Typography variant="body1" paragraph>
+      <Typography variant="body1" paragraph sx={{ mb: { xs: 2, sm: 3 } }}>
         Analyze pick strategies and bracket similarity.
       </Typography>
       
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: { xs: 2, sm: 3 } }}>
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="pool analysis tabs">
           <Tab label="Pick Strategy" id="analysis-tab-0" aria-controls="analysis-tabpanel-0" />
           <Tab label="Bracket Similarity" id="analysis-tab-1" aria-controls="analysis-tabpanel-1" />
@@ -583,21 +587,30 @@ const PoolAnalysisPage = () => {
                   />
                 </FormControl>
                 
-                <Typography variant="body2" paragraph>
+                <Typography variant="body2" paragraph sx={{ mb: 1.5 }}>
                   This tool calculates how similar other users' brackets are to the selected user's bracket.
                   Similarity is based on the Jaccard index of matching picks across all games.
                 </Typography>
                 
-                <Box sx={{ bgcolor: 'info.light', p: 2, borderRadius: 1 }}>
-                  <Typography variant="subtitle2" color="info.contrastText" gutterBottom>
-                    How is Similarity Calculated?
-                  </Typography>
-                  <Typography variant="body2" color="info.contrastText">
-                    The Jaccard similarity index measures the overlap between two sets of picks.
-                    It's calculated as the size of the intersection divided by the size of the union.
-                    A score of 1.0 means identical brackets, while 0.0 means completely different picks.
-                  </Typography>
-                </Box>
+                <Accordion disableGutters sx={{ borderRadius: 1, overflow: 'hidden' }}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls="jaccard-help-content"
+                    id="jaccard-help-header"
+                    sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}
+                  >
+                    <Typography variant="subtitle2">
+                      How is Jaccard similarity calculated?
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ bgcolor: 'info.light', pt: 0 }}>
+                    <Typography variant="body2" color="info.contrastText">
+                      The Jaccard similarity index measures the overlap between two sets of picks.
+                      It is calculated as the size of the intersection divided by the size of the union.
+                      A score of 1.0 means identical brackets, while 0.0 means completely different picks.
+                    </Typography>
+                  </AccordionDetails>
+                </Accordion>
               </CardContent>
             </Card>
           </Grid>
@@ -642,54 +655,41 @@ const PoolAnalysisPage = () => {
       
       <TabPanel value={tabValue} index={0}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={4} sx={{ order: { xs: 1, md: 1 } }}>
             <Card>
-              <CardHeader title="Pick Strategy Analysis" />
               <CardContent>
-                <Typography variant="body1" gutterBottom>
-                  We analyze two distinct aspects of pick strategy:
-                </Typography>
-                
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" gutterBottom>Chalk Score</Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    Measures how often users pick the team with the lower seed (favorites).
-                    Higher scores mean the user consistently picks favorites.
-                  </Typography>
-                  
-                  <Typography variant="subtitle1" gutterBottom>Herding Score</Typography>
-                  <Typography variant="body2">
-                    Measures how often users pick the same teams as the majority of the pool.
-                    Higher scores mean the user tends to follow the crowd.
-                  </Typography>
-                  
-                  <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Deviation Score</Typography>
-                  <Typography variant="body2">
-                    Measures how much users deviate from the consensus picks.
-                    Higher scores mean the user makes more contrarian picks.
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ bgcolor: 'info.light', p: 2, borderRadius: 1 }}>
-                  <Typography variant="subtitle2" color="info.contrastText" gutterBottom>
-                    How are these scores calculated?
-                  </Typography>
-                  <Typography variant="body2" color="info.contrastText">
-                    <strong>Chalk Score:</strong> Percentage of games where the user picked the team with the lower seed number.
-                    <br /><br />
-                    <strong>Herding Score:</strong> Percentage of games where the user picked the same team as the majority of other users.
-                    <br /><br />
-                    <strong>Deviation Score:</strong> Sum of deviation values across all games, where each deviation is calculated as (1 - [picks for team / max picks for any team]).
-                  </Typography>
-                </Box>
+                <Accordion disableGutters sx={{ borderRadius: 1, overflow: 'hidden' }}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls="score-help-content"
+                    id="score-help-header"
+                    sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}
+                  >
+                    <Typography variant="subtitle2">
+                      How are these scores calculated?
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ bgcolor: 'info.light', pt: 0 }}>
+                    <Typography variant="body2" color="info.contrastText">
+                      <strong>Chalk Score:</strong> Percentage of games where the user picked the team with the lower seed number.
+                      <br /><br />
+                      <strong>Herding Score:</strong> Percentage of games where the user picked the same team as the majority of other users.
+                      <br /><br />
+                      <strong>Deviation Score:</strong> Sum of deviation values across all games, where each deviation is calculated as (1 - [picks for team / max picks for any team]).
+                    </Typography>
+                  </AccordionDetails>
+                </Accordion>
               </CardContent>
             </Card>
           </Grid>
           
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12} md={8} sx={{ order: { xs: 2, md: 2 } }}>
             <Card sx={{ mb: 3 }}>
               <CardHeader title="Most Chalky Brackets (Picked by Seed)" />
               <CardContent>
+                <Typography variant="body2" sx={{ mb: 1.5 }}>
+                  Higher chalk score means more picks of lower-seeded favorites.
+                </Typography>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -721,6 +721,9 @@ const PoolAnalysisPage = () => {
             <Card sx={{ mb: 3 }}>
               <CardHeader title="Most Popular Opinion Followers (Herding)" />
               <CardContent>
+                <Typography variant="body2" sx={{ mb: 1.5 }}>
+                  Higher herding score means more picks aligned with the pool majority.
+                </Typography>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -752,6 +755,9 @@ const PoolAnalysisPage = () => {
             <Card>
               <CardHeader title="Most Contrarian Brackets" />
               <CardContent>
+                <Typography variant="body2" sx={{ mb: 1.5 }}>
+                  Higher deviation score means more divergence from consensus picks.
+                </Typography>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
