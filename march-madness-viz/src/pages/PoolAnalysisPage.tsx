@@ -535,18 +535,17 @@ const PoolAnalysisPage = () => {
       </Typography>
       
       <Typography variant="body1" paragraph>
-        Analyze bracket similarity, user clusters, and pick strategies.
+        Analyze pick strategies and bracket similarity.
       </Typography>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="pool analysis tabs">
-          <Tab label="Bracket Similarity" id="analysis-tab-0" aria-controls="analysis-tabpanel-0" />
-          <Tab label="Pick Strategy" id="analysis-tab-1" aria-controls="analysis-tabpanel-1" />
-          <Tab label="User Clusters" id="analysis-tab-2" aria-controls="analysis-tabpanel-2" />
+          <Tab label="Pick Strategy" id="analysis-tab-0" aria-controls="analysis-tabpanel-0" />
+          <Tab label="Bracket Similarity" id="analysis-tab-1" aria-controls="analysis-tabpanel-1" />
         </Tabs>
       </Box>
       
-      <TabPanel value={tabValue} index={0}>
+      <TabPanel value={tabValue} index={1}>
         <Grid container spacing={3}>
           <Grid item xs={12} md={4}>
             <Card>
@@ -641,7 +640,7 @@ const PoolAnalysisPage = () => {
         </Grid>
       </TabPanel>
       
-      <TabPanel value={tabValue} index={1}>
+      <TabPanel value={tabValue} index={0}>
         <Grid container spacing={3}>
           <Grid item xs={12} md={4}>
             <Card>

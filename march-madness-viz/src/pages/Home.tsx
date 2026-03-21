@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   Box, 
   Typography, 
@@ -9,8 +8,7 @@ import {
   CardActions,
   Button,
   CircularProgress,
-  Stack,
-  Container
+  Stack
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
@@ -79,27 +77,6 @@ const Home = () => {
 
         <Grid item xs={12} md={6} lg={4}>
           <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <CardHeader title="Pool Analysis" />
-            <CardContent sx={{ flexGrow: 1 }}>
-              <Typography variant="body1">
-                Compare bracket similarity, user clusters, and pick strategy trends across the pool.
-              </Typography>
-            </CardContent>
-            <CardActions>
-              <Button 
-                component={RouterLink} 
-                  to={yearPath('/pool-analysis')}
-                variant="contained" 
-                color="primary"
-              >
-                View Pool Analysis
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <CardHeader title="Round Analysis" />
             <CardContent sx={{ flexGrow: 1 }}>
               <Typography variant="body1">
@@ -135,6 +112,27 @@ const Home = () => {
                 color="primary"
               >
                 View Team Analysis
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} md={6} lg={4}>
+          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <CardHeader title="Pool Analysis" />
+            <CardContent sx={{ flexGrow: 1 }}>
+              <Typography variant="body1">
+                Compare bracket similarity and pick strategy trends across the pool.
+              </Typography>
+            </CardContent>
+            <CardActions>
+              <Button 
+                component={RouterLink} 
+                  to={yearPath('/pool-analysis')}
+                variant="contained" 
+                color="primary"
+              >
+                View Pool Analysis
               </Button>
             </CardActions>
           </Card>
