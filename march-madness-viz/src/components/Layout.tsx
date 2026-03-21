@@ -147,7 +147,10 @@ const Layout = ({ children, year }: { children: any; year: string }) => {
         </Box>
       </Drawer>
 
-      <Container maxWidth="xl" sx={{ pt: 4, pb: 5, flexGrow: 1 }}>
+      <Container
+        maxWidth="xl"
+        sx={{ pt: { xs: 2, sm: 4 }, pb: { xs: 3, sm: 5 }, px: { xs: 2, sm: 3 }, flexGrow: 1, overflowX: 'hidden' }}
+      >
         {children}
       </Container>
     </Box>

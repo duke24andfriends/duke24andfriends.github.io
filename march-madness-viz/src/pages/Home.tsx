@@ -40,20 +40,35 @@ const Home = () => {
   }
 
   return (
-    <Stack spacing={4}>
-      <Box sx={{ textAlign: 'center', width: '100%', py: 3 }}>
-        <Typography variant="h2" component="h1" gutterBottom>
-          March Madness Bracket Visualization
+    <Stack spacing={{ xs: 3, sm: 4 }} sx={{ width: '100%', overflowX: 'hidden' }}>
+      <Box sx={{ textAlign: 'center', width: '100%', py: { xs: 1, sm: 3 } }}>
+        <Typography
+          variant="h2"
+          component="h1"
+          gutterBottom
+          sx={{ fontSize: { xs: '2.1rem', sm: '3rem', md: '3.75rem' }, lineHeight: 1.1 }}
+        >
+          <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+            March Madness Bracket Viz
+          </Box>
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            March Madness Bracket Visualization
+          </Box>
         </Typography>
-        <Typography variant="h6" sx={{ mt: 2 }}>
-          Interactive tools for analyzing the Duke24 March Madness Bracket Pool
+        <Typography variant="h6" sx={{ mt: 2, fontSize: { xs: '1.2rem', sm: '1.4rem' } }}>
+          <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+            Interactive tools for the Duke24 March Madness pool
+          </Box>
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            Interactive tools for analyzing the Duke24 March Madness Bracket Pool
+          </Box>
         </Typography>
-        <Typography variant="body1">
+        <Typography variant="body1" sx={{ fontSize: { xs: '1rem', sm: '1rem' } }}>
           Total Brackets: {bracketData?.metadata.total_brackets}
         </Typography>
       </Box>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ width: '100%', m: 0 }}>
         <Grid item xs={12} md={6} lg={4}>
           <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <CardHeader title="Leaderboard" />
