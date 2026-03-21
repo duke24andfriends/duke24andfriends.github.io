@@ -109,6 +109,11 @@ const PoolAnalysisPage = () => {
   const [tabValue, setTabValue] = useState(0);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [clusterCount, setClusterCount] = useState<number>(3);
+
+  const getDisplayName = (username: string) => {
+    const userData = userScores.find(user => user.username === username);
+    return userData?.fullName || username;
+  };
   
   // Check for user parameter in URL
   useEffect(() => {
@@ -560,10 +565,9 @@ const PoolAnalysisPage = () => {
                     id="user-select"
                     options={userScores}
                     getOptionLabel={(option) => {
-                      const nameMapping = option.bracketName && option.fullName ? 
-                        `${option.username} (${option.bracketName} - ${option.fullName})` : 
-                        option.username;
-                      return nameMapping;
+                      return option.fullName
+                        ? `${option.fullName} (@${option.username})`
+                        : option.username;
                     }}
                     isOptionEqualToValue={(option, value) => option.username === value.username}
                     value={userScores.find(user => user.username === selectedUser) || null}
@@ -617,7 +621,7 @@ const PoolAnalysisPage = () => {
           
           <Grid item xs={12} md={8}>
             <Card>
-              <CardHeader title={selectedUser ? `Users Most Similar to ${selectedUser}` : "Select a User"} />
+              <CardHeader title={selectedUser ? `Users Most Similar to ${getDisplayName(selectedUser)}` : "Select a User"} />
               <CardContent>
                 {!selectedUser ? (
                   <Typography variant="body1">
@@ -693,7 +697,7 @@ const PoolAnalysisPage = () => {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Username</TableCell>
+                      <TableCell>Name</TableCell>
                       <TableCell align="right">Chalk Score</TableCell>
                       <TableCell align="right">Score</TableCell>
                     </TableRow>
@@ -706,7 +710,7 @@ const PoolAnalysisPage = () => {
                         <TableRow key={user.username}>
                           <TableCell>
                             <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                              {user.username}
+                              {getDisplayName(user.username)}
                             </Link>
                           </TableCell>
                           <TableCell align="right">{user.chalkScore.toFixed(1)}%</TableCell>
@@ -727,7 +731,7 @@ const PoolAnalysisPage = () => {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Username</TableCell>
+                      <TableCell>Name</TableCell>
                       <TableCell align="right">Herding Score</TableCell>
                       <TableCell align="right">Score</TableCell>
                     </TableRow>
@@ -740,7 +744,7 @@ const PoolAnalysisPage = () => {
                         <TableRow key={user.username}>
                           <TableCell>
                             <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                              {user.username}
+                              {getDisplayName(user.username)}
                             </Link>
                           </TableCell>
                           <TableCell align="right">{user.herdingScore.toFixed(1)}%</TableCell>
@@ -761,7 +765,7 @@ const PoolAnalysisPage = () => {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Username</TableCell>
+                      <TableCell>Name</TableCell>
                       <TableCell align="right">Deviation Score</TableCell>
                       <TableCell align="right">Score</TableCell>
                     </TableRow>
@@ -774,7 +778,7 @@ const PoolAnalysisPage = () => {
                         <TableRow key={user.username}>
                           <TableCell>
                             <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                              {user.username}
+                              {getDisplayName(user.username)}
                             </Link>
                           </TableCell>
                           <TableCell align="right">{user.deviationScore.toFixed(1)}</TableCell>
@@ -898,7 +902,7 @@ const PoolAnalysisPage = () => {
                               label: function(context) {
                                 const user = context.raw;
                                 return [
-                                  `${user.username}`,
+                                  `${getDisplayName(user.username)}`,
                                   `Score: ${user.score}`,
                                   `Chalk: ${user.x.toFixed(1)}%`,
                                   `Herding: ${user.y.toFixed(1)}%`

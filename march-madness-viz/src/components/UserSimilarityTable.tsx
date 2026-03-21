@@ -94,6 +94,7 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell>Name</TableCell>
               <TableCell>Username</TableCell>
               <TableCell>Bracket Name</TableCell>
               <TableCell>Full Name</TableCell>
@@ -158,7 +159,12 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
                 <TableRow key={user.username}>
                   <TableCell>
                     <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                      {user.username}
+                      {userMapping.fullName || user.username}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
+                      @{user.username}
                     </Link>
                   </TableCell>
                   <TableCell>

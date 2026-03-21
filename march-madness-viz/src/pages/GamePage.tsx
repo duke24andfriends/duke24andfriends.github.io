@@ -69,6 +69,11 @@ const GamePage = () => {
     loading, 
     error 
   } = useData();
+
+  const getDisplayName = (username: string) => {
+    const userData = userScores.find(user => user.username === username);
+    return userData?.fullName || username;
+  };
   
   // Helper function to get the feeding games
   const getFeedingGames = (gameIdNum: number) => {
@@ -195,7 +200,8 @@ const GamePage = () => {
     
     Object.entries(userPicks.teams).forEach(([team, data]) => {
       const filteredUsers = data.users.filter(user => 
-        user.toLowerCase().includes(searchTerm.toLowerCase())
+        user.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getDisplayName(user).toLowerCase().includes(searchTerm.toLowerCase())
       );
       
       filteredTeams[team] = {
@@ -205,7 +211,7 @@ const GamePage = () => {
     });
     
     return { teams: filteredTeams, total: userPicks.total };
-  }, [userPicks, searchTerm]);
+  }, [userPicks, searchTerm, userScores]);
   
   // Create chart data
   const chartData = useMemo(() => {
@@ -467,7 +473,7 @@ const GamePage = () => {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Username</TableCell>
+                          <TableCell>Name</TableCell>
                           <TableCell align="right">Current Score</TableCell>
                         </TableRow>
                       </TableHead>
@@ -482,7 +488,7 @@ const GamePage = () => {
                                   to={yearPath(`/users/${username}`)}
                                   sx={{ textDecoration: 'none' }}
                                 >
-                                  {username}
+                                  {getDisplayName(username)}
                                 </Link>
                               </TableCell>
                               <TableCell align="right">{userData?.score || 0}</TableCell>
@@ -520,7 +526,7 @@ const GamePage = () => {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Username</TableCell>
+                          <TableCell>Name</TableCell>
                           <TableCell align="right">Current Score</TableCell>
                         </TableRow>
                       </TableHead>
@@ -535,7 +541,7 @@ const GamePage = () => {
                                   to={yearPath(`/users/${username}`)}
                                   sx={{ textDecoration: 'none' }}
                                 >
-                                  {username}
+                                  {getDisplayName(username)}
                                 </Link>
                               </TableCell>
                               <TableCell align="right">{userData?.score || 0}</TableCell>
@@ -570,7 +576,7 @@ const GamePage = () => {
                       <Table size="small">
                         <TableHead>
                           <TableRow>
-                            <TableCell>Username</TableCell>
+                            <TableCell>Name</TableCell>
                             <TableCell align="right">Current Score</TableCell>
                           </TableRow>
                         </TableHead>
@@ -585,7 +591,7 @@ const GamePage = () => {
                                     to={yearPath(`/users/${username}`)}
                                     sx={{ textDecoration: 'none' }}
                                   >
-                                    {username}
+                                    {getDisplayName(username)}
                                   </Link>
                                 </TableCell>
                                 <TableCell align="right">{userData?.score || 0}</TableCell>
