@@ -38,6 +38,7 @@ import {
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { ROUNDS } from '../types';
 import { useYearPath } from '../utils/yearRouting';
 
@@ -111,7 +112,8 @@ const RoundPage = () => {
   const { yearPath } = useYearPath();
   const { bracketData, gameWinners, gameResults, roundAccuracy, loading, error } = useData();
   const theme = useTheme();
-  
+  const isNarrowScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<'game' | 'user'>('game');
@@ -211,50 +213,69 @@ const RoundPage = () => {
   const roundStats = roundAccuracy[currentRoundId] || { accuracy: 0, correct: 0, total: 0 };
   const avgAccuracy = roundStats.accuracy;
   
+  const fullGameAccuracyLabels = sortedGames.map(game => {
+    const winner = game?.winner ? `${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}` : '';
+    const loser = game?.loser ? `${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}` : '';
+
+    if (winner && loser) {
+      return `${winner} vs ${loser}`;
+    }
+
+    const gameId = game?.gameId;
+    if (gameId) {
+      const gameResult = gameResults.find(r => r.gameId === gameId);
+      if (gameResult?.winner && gameResult?.loser) {
+        const winnerSeed = gameResult.winnerSeed ? ` (#${gameResult.winnerSeed})` : '';
+        const loserSeed = gameResult.loserSeed ? ` (#${gameResult.loserSeed})` : '';
+        return `${gameResult.winner}${winnerSeed} vs ${gameResult.loser}${loserSeed}`;
+      }
+    }
+
+    return `Game ${game?.gameId}`;
+  });
+
+  // Keep mobile labels short but meaningful
+  const shortGameAccuracyLabels = sortedGames.map(game => {
+    const leftTeam = game?.completed ? game.winner : game?.teams?.[0];
+    const rightTeam = game?.completed ? game.loser : game?.teams?.[1];
+
+    if (leftTeam && rightTeam) {
+      return `${leftTeam} v ${rightTeam}`;
+    }
+
+    return game?.gameId != null ? `Game ${game.gameId}` : '';
+  });
+
   // Format data for bar chart
   const chartData = {
-    labels: sortedGames.map(game => {
-      const winner = game?.winner ? `${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}` : '';
-      const loser = game?.loser ? `${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}` : '';
-      
-      if (winner && loser) {
-        return `${winner} vs ${loser}`;
-      }
-      
-      // For games 1, 9, 17, 25 and any others with missing teams, check the gameResults
-      const gameId = game?.gameId;
-      if (gameId) {
-        const gameResult = gameResults.find(r => r.gameId === gameId);
-        if (gameResult?.winner && gameResult?.loser) {
-          const winnerSeed = gameResult.winnerSeed ? ` (#${gameResult.winnerSeed})` : '';
-          const loserSeed = gameResult.loserSeed ? ` (#${gameResult.loserSeed})` : '';
-          return `${gameResult.winner}${winnerSeed} vs ${gameResult.loser}${loserSeed}`;
-        }
-      }
-      
-      return `Game ${game?.gameId}`;
-    }),
+    labels: isNarrowScreen ? shortGameAccuracyLabels : fullGameAccuracyLabels,
     datasets: [
       {
         label: 'User Accuracy (%)',
         data: sortedGames.map(game => game?.accuracy || 0),
-        backgroundColor: sortedGames.map(game => 
-          (game?.accuracy || 0) >= 50 
-            ? theme.palette.success.light 
+        backgroundColor: sortedGames.map(game =>
+          (game?.accuracy || 0) >= 50
+            ? theme.palette.success.light
             : theme.palette.error.light
         ),
-        borderColor: sortedGames.map(game => 
-          (game?.accuracy || 0) >= 50 
-            ? theme.palette.success.main 
+        borderColor: sortedGames.map(game =>
+          (game?.accuracy || 0) >= 50
+            ? theme.palette.success.main
             : theme.palette.error.main
         ),
         borderWidth: 1,
+        ...(isNarrowScreen ? { maxBarThickness: 16 } : {}),
       }
     ],
   };
-  
+
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: (isNarrowScreen ? 'y' : 'x') as 'x' | 'y',
+    interaction: isNarrowScreen
+      ? { mode: 'index' as const, intersect: false }
+      : { mode: 'nearest' as const, intersect: true },
     plugins: {
       legend: {
         position: 'top' as const,
@@ -265,7 +286,12 @@ const RoundPage = () => {
       },
       tooltip: {
         callbacks: {
-          label: function(context) {
+          title: (items) => {
+            if (!items.length) return '';
+            const i = items[0].dataIndex;
+            return fullGameAccuracyLabels[i] ?? items[0].label;
+          },
+          label: function (context) {
             const game = sortedGames[context.dataIndex];
             return [
               `Accuracy: ${game.accuracy.toFixed(1)}%`,
@@ -275,23 +301,49 @@ const RoundPage = () => {
         }
       }
     },
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        title: {
-          display: true,
-          text: 'Accuracy (%)'
+    scales: isNarrowScreen
+      ? {
+          x: {
+            beginAtZero: true,
+            max: 100,
+            title: {
+              display: true,
+              text: 'Accuracy (%)'
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'Game'
+            },
+            ticks: {
+              autoSkip: false,
+              font: { size: 11 }
+            }
+          }
         }
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Games'
-        }
-      }
-    },
-    onClick: (_, elements) => {
+      : {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            title: {
+              display: true,
+              text: 'Accuracy (%)'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Games'
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 0,
+              autoSkip: true
+            }
+          }
+        },
+    onClick: (_: unknown, elements: { index: number }[]) => {
       if (elements && elements.length > 0) {
         const clickedIndex = elements[0].index;
         const gameId = sortedGames[clickedIndex].gameId;
@@ -365,6 +417,7 @@ const RoundPage = () => {
   
   const distributionChartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'top' as const,
@@ -484,7 +537,17 @@ const RoundPage = () => {
               subheader={viewMode === 'game' ? "Click on a bar to see detailed pick distribution for that game" : "Distribution of correct picks per user"}
             />
             <CardContent>
-              <Box sx={{ height: 400 }}>
+              <Box
+                sx={{
+                  width: '100%',
+                  height:
+                    viewMode === 'game'
+                      ? isNarrowScreen
+                        ? Math.min(90 + sortedGames.length * 20, 1100)
+                        : 400
+                      : 400
+                }}
+              >
                 {viewMode === 'game' ? (
                   <Bar 
                     data={chartData} 
@@ -587,16 +650,22 @@ const RoundPage = () => {
           <Card>
             <CardHeader title={`${displayRoundName(currentRoundId)} Games`} />
             <CardContent>
-              <TableContainer component={Paper}>
-                <Table size="small">
+              {isNarrowScreen && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Swipe left/right to see more columns
+                </Typography>
+              )}
+              <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+                <Table size="small" sx={{ minWidth: isNarrowScreen ? 760 : 'auto' }}>
                   <TableHead>
                     <TableRow>
                       <TableCell>Game</TableCell>
                       <TableCell>Teams</TableCell>
+                      {isNarrowScreen && <TableCell align="right">Accuracy</TableCell>}
                       <TableCell>Status</TableCell>
                       <TableCell>Result</TableCell>
                       <TableCell align="right">Correct Picks</TableCell>
-                      <TableCell align="right">Accuracy</TableCell>
+                      {!isNarrowScreen && <TableCell align="right">Accuracy</TableCell>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -611,6 +680,7 @@ const RoundPage = () => {
                               color="primary"
                               component={RouterLink}
                               to={yearPath(`/games/${game.gameId}`)}
+                              sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 'auto' }}
                             >
                               Game {game.gameId}
                             </Button>
@@ -628,6 +698,11 @@ const RoundPage = () => {
                               </Stack>
                             )}
                           </TableCell>
+                          {isNarrowScreen && (
+                            <TableCell align="right">
+                              {game.completed ? `${game.accuracy.toFixed(1)}%` : '-'}
+                            </TableCell>
+                          )}
                           <TableCell>
                             <Chip 
                               color={game.completed ? 'success' : 'warning'} 
@@ -663,9 +738,11 @@ const RoundPage = () => {
                           <TableCell align="right">
                             {game.completed ? `${game.correctPicks}/${game.totalPicks}` : '-'}
                           </TableCell>
-                          <TableCell align="right">
-                            {game.completed ? `${game.accuracy.toFixed(1)}%` : '-'}
-                          </TableCell>
+                          {!isNarrowScreen && (
+                            <TableCell align="right">
+                              {game.completed ? `${game.accuracy.toFixed(1)}%` : '-'}
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
