@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -116,6 +116,25 @@ const RoundPage = () => {
   const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<'game' | 'user'>('game');
   
+  // Format round name for display
+  const displayRoundName = (roundKey: string) => {
+    switch (roundKey) {
+      case 'ROUND_64': return 'Round of 64';
+      case 'ROUND_32': return 'Round of 32';
+      case 'SWEET_16': return 'Sweet 16';
+      case 'ELITE_8': return 'Elite 8';
+      case 'FINAL_FOUR': return 'Final Four';
+      case 'CHAMPIONSHIP': return 'Championship';
+      default: return roundKey.replace('_', ' ');
+    }
+  };
+  
+  // Ensure we have a valid round ID
+  const currentRoundId = getValidRoundId(roundId);
+  
+  // Get the games for this round
+  const currentRoundGames = ROUNDS[currentRoundId as keyof typeof ROUNDS] || [];
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', height: '300px', alignItems: 'center' }}>
@@ -136,25 +155,6 @@ const RoundPage = () => {
       </Box>
     );
   }
-  
-  // Format round name for display
-  const displayRoundName = (roundKey: string) => {
-    switch (roundKey) {
-      case 'ROUND_64': return 'Round of 64';
-      case 'ROUND_32': return 'Round of 32';
-      case 'SWEET_16': return 'Sweet 16';
-      case 'ELITE_8': return 'Elite 8';
-      case 'FINAL_FOUR': return 'Final Four';
-      case 'CHAMPIONSHIP': return 'Championship';
-      default: return roundKey.replace('_', ' ');
-    }
-  };
-  
-  // Ensure we have a valid round ID
-  const currentRoundId = getValidRoundId(roundId);
-  
-  // Get the games for this round
-  const currentRoundGames = ROUNDS[currentRoundId as keyof typeof ROUNDS] || [];
   
   // Check which games have been completed
   const completedGames = currentRoundGames.filter(gameId => 
@@ -301,7 +301,7 @@ const RoundPage = () => {
   };
   
   // Calculate user accuracy distribution for this round
-  const accuracyDistribution = useMemo(() => {
+  const accuracyDistribution = (() => {
     if (!bracketData || !currentRoundGames || !gameResults) return null;
     
     // Map to store how many users got 0, 1, 2, ... games correct
@@ -340,10 +340,10 @@ const RoundPage = () => {
     });
     
     return distribution;
-  }, [bracketData, currentRoundGames, gameWinners]);
+  })();
   
   // Create distribution chart data
-  const distributionChartData = useMemo(() => {
+  const distributionChartData = (() => {
     if (!accuracyDistribution) return null;
     
     const labels = Object.keys(accuracyDistribution);
@@ -361,7 +361,7 @@ const RoundPage = () => {
         }
       ]
     };
-  }, [accuracyDistribution, theme]);
+  })();
   
   const distributionChartOptions = {
     responsive: true,
@@ -398,7 +398,7 @@ const RoundPage = () => {
       }
     }
   };
-  
+
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom>
