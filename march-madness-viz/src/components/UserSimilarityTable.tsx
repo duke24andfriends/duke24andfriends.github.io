@@ -31,14 +31,20 @@ interface UserSimilarityTableProps {
 }
 
 const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({ 
-  similarities, 
-  selectedUser, 
+  similarities,
   limit = 15,
   showDescription = true 
 }) => {
   // Access user name mappings from context
   const { userNameMapping } = useData();
   const { yearPath } = useYearPath();
+
+  const hideOnMobileSx = { display: { xs: 'none', sm: 'table-cell' } } as const;
+  const compactCellSx = { px: { xs: 1, sm: 2 }, py: { xs: 1, sm: 1.5 } } as const;
+  const compactMetricCellSx = {
+    ...compactCellSx,
+    whiteSpace: 'nowrap'
+  } as const;
   
   // State for managing sorting
   const [sortConfig, setSortConfig] = useState<{
@@ -90,14 +96,14 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
         </Typography>
       )}
       
-      <Paper sx={{ overflowX: 'auto', width: '100%' }}>
-        <Table size="small">
+      <Paper sx={{ overflowX: { xs: 'visible', sm: 'auto' }, width: '100%' }}>
+        <Table size="small" sx={{ tableLayout: { xs: 'fixed', sm: 'auto' }, width: '100%' }}>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Username</TableCell>
-              <TableCell>Bracket Name</TableCell>
-              <TableCell>Full Name</TableCell>
+              <TableCell sx={{ ...compactCellSx, width: { xs: '32%', sm: 'auto' } }}>Name</TableCell>
+              <TableCell sx={hideOnMobileSx}>Username</TableCell>
+              <TableCell sx={hideOnMobileSx}>Bracket Name</TableCell>
+              <TableCell sx={hideOnMobileSx}>Full Name</TableCell>
               <TableCell 
                 align="right" 
                 onClick={() => requestSort('similarity')}
@@ -105,10 +111,16 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
                   cursor: 'pointer',
                   fontWeight: sortConfig.key === 'similarity' ? 'bold' : 'normal',
                   textDecoration: sortConfig.key === 'similarity' ? 'underline' : 'none',
-                  whiteSpace: 'nowrap'
+                  ...compactMetricCellSx
                 }}
               >
-                Regular Similarity {sortConfig.key === 'similarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  Regular Similarity
+                </Box>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                  Regular
+                </Box>
+                {sortConfig.key === 'similarity' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </TableCell>
               <TableCell 
                 align="right"
@@ -117,10 +129,16 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
                   cursor: 'pointer',
                   fontWeight: sortConfig.key === 'weightedSimilarity' ? 'bold' : 'normal',
                   textDecoration: sortConfig.key === 'weightedSimilarity' ? 'underline' : 'none',
-                  whiteSpace: 'nowrap'
+                  ...compactMetricCellSx
                 }}
               >
-                Weighted Similarity {sortConfig.key === 'weightedSimilarity' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  Weighted Similarity
+                </Box>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                  Weighted
+                </Box>
+                {sortConfig.key === 'weightedSimilarity' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </TableCell>
               <TableCell 
                 align="right"
@@ -129,10 +147,16 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
                   cursor: 'pointer',
                   fontWeight: sortConfig.key === 'sharedPoints' ? 'bold' : 'normal',
                   textDecoration: sortConfig.key === 'sharedPoints' ? 'underline' : 'none',
-                  whiteSpace: 'nowrap'
+                  ...compactMetricCellSx
                 }}
               >
-                Shared Points {sortConfig.key === 'sharedPoints' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  Shared Points
+                </Box>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                  Shared
+                </Box>
+                {sortConfig.key === 'sharedPoints' && (sortConfig.direction === 'ascending' ? ' ↑' : ' ↓')}
               </TableCell>
               <TableCell 
                 align="right"
@@ -141,7 +165,8 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
                   cursor: 'pointer',
                   fontWeight: sortConfig.key === 'score' ? 'bold' : 'normal',
                   textDecoration: sortConfig.key === 'score' ? 'underline' : 'none',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  ...hideOnMobileSx
                 }}
               >
                 Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
@@ -157,30 +182,41 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
               
               return (
                 <TableRow key={user.username}>
-                  <TableCell>
-                    <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                      {userMapping.fullName || user.username}
-                    </Link>
+                  <TableCell sx={compactCellSx}>
+                    <Tooltip title={userMapping.fullName || user.username} arrow placement="top">
+                      <Link
+                        component={RouterLink}
+                        to={yearPath(`/users/${user.username}`)}
+                        sx={{
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {userMapping.fullName || user.username}
+                      </Link>
+                    </Tooltip>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={hideOnMobileSx}>
                     <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
                       @{user.username}
                     </Link>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={hideOnMobileSx}>
                     <Tooltip title={userMapping.bracketName} arrow placement="top">
                       <span>{userMapping.bracketName}</span>
                     </Tooltip>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={hideOnMobileSx}>
                     <Tooltip title={userMapping.fullName} arrow placement="top">
                       <span>{userMapping.fullName}</span>
                     </Tooltip>
                   </TableCell>
-                  <TableCell align="right">{(user.similarity * 100).toFixed(1)}%</TableCell>
-                  <TableCell align="right">{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
-                  <TableCell align="right">{user.sharedPoints}</TableCell>
-                  <TableCell align="right">{user.score}</TableCell>
+                  <TableCell align="right" sx={compactMetricCellSx}>{(user.similarity * 100).toFixed(1)}%</TableCell>
+                  <TableCell align="right" sx={compactMetricCellSx}>{(user.weightedSimilarity * 100).toFixed(1)}%</TableCell>
+                  <TableCell align="right" sx={compactMetricCellSx}>{user.sharedPoints}</TableCell>
+                  <TableCell align="right" sx={hideOnMobileSx}>{user.score}</TableCell>
                 </TableRow>
               );
             })}

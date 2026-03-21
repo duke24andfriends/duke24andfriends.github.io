@@ -639,10 +639,6 @@ const PoolAnalysisPage = () => {
                       Click column headers to sort. Weighted metrics emphasize matches in later rounds, which are worth more points.
                     </Typography>
                     
-                    <Tabs value={0} aria-label="similarity tabs">
-                      <Tab label="All Users" />
-                    </Tabs>
-                    
                     <UserSimilarityTable 
                       similarities={userSimilarities}
                       selectedUser={selectedUser}
