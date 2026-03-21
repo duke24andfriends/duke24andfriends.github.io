@@ -64,10 +64,10 @@ const Layout = ({ children, year }: { children: any; year: string }) => {
   
   const navItems = [
     { name: 'Home', path: getYearPath(year, '/') },
-    { name: 'Leaderboard', path: getYearPath(year, '/leaderboard') },
     { name: 'Rounds', path: getYearPath(year, `/rounds/${mostRecentRound}`) },
     { name: 'Teams', path: getYearPath(year, '/teams/DUKE') },
     { name: 'Pool Analysis', path: getYearPath(year, '/pool-analysis') },
+    { name: 'Leaderboard', path: getYearPath(year, '/leaderboard') },
   ];
 
   const handleOpen = () => {

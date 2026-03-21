@@ -71,27 +71,6 @@ const Home = () => {
       <Grid container spacing={{ xs: 2, md: 3 }} sx={{ width: '100%', m: 0 }}>
         <Grid item xs={12} md={6} lg={4}>
           <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <CardHeader title="Leaderboard" />
-            <CardContent sx={{ flexGrow: 1 }}>
-              <Typography variant="body1">
-                View the current standings and see how scores have changed over time. Filter users and generate shareable links.
-              </Typography>
-            </CardContent>
-            <CardActions>
-              <Button 
-                component={RouterLink} 
-                  to={yearPath('/leaderboard')}
-                variant="contained" 
-                color="primary"
-              >
-                View Leaderboard
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6} lg={4}>
-          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <CardHeader title="Round Analysis" />
             <CardContent sx={{ flexGrow: 1 }}>
               <Typography variant="body1">
@@ -148,6 +127,27 @@ const Home = () => {
                 color="primary"
               >
                 View Pool Analysis
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6} lg={4}>
+          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <CardHeader title="Leaderboard" />
+            <CardContent sx={{ flexGrow: 1 }}>
+              <Typography variant="body1">
+                View the current standings and see how scores have changed over time. Filter users and generate shareable links.
+              </Typography>
+            </CardContent>
+            <CardActions>
+              <Button 
+                component={RouterLink} 
+                  to={yearPath('/leaderboard')}
+                variant="contained" 
+                color="primary"
+              >
+                View Leaderboard
               </Button>
             </CardActions>
           </Card>
