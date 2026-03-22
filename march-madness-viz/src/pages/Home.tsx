@@ -10,13 +10,16 @@ import {
   CircularProgress,
   Stack
 } from '@mui/material';
+import { useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useYearPath } from '../utils/yearRouting';
+import { getMostRecentRound } from '../utils/mostRecentRound';
 
 const Home = () => {
-  const { loading, error, bracketData } = useData();
+  const { loading, error, bracketData, gameResults } = useData();
   const { yearPath } = useYearPath();
+  const mostRecentRound = useMemo(() => getMostRecentRound(gameResults), [gameResults]);
 
   if (loading) {
     return (
@@ -80,7 +83,7 @@ const Home = () => {
             <CardActions>
               <Button 
                 component={RouterLink} 
-                  to={yearPath('/rounds/ROUND_64')}
+                  to={yearPath(`/rounds/${mostRecentRound}`)}
                 variant="contained" 
                 color="primary"
               >

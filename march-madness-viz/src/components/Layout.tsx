@@ -19,24 +19,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { useData } from '../context/DataContext';
 import { AVAILABLE_YEARS, getYearPath } from '../utils/yearRouting';
-
-// Helper to determine the most recent round
-function getMostRecentRound(gameResults: any[]): string {
-  if (!gameResults || gameResults.length === 0) return 'ROUND_64';
-  
-  // Find the game with the highest ID that has been played
-  const maxGameId = Math.max(...gameResults.map(game => parseInt(game.gameId)));
-  
-  // Map game ID to round
-  if (maxGameId <= 32) return 'ROUND_64';
-  if (maxGameId <= 48) return 'ROUND_32';
-  if (maxGameId <= 56) return 'SWEET_16';
-  if (maxGameId <= 60) return 'ELITE_8';
-  if (maxGameId <= 62) return 'FINAL_FOUR';
-  if (maxGameId <= 63) return 'CHAMPIONSHIP';
-  
-  return 'ROUND_64'; // Default fallback
-}
+import { getMostRecentRound } from '../utils/mostRecentRound';
 
 const NavLink = ({ children, path }: { children: any; path: string }) => (
   <Button
