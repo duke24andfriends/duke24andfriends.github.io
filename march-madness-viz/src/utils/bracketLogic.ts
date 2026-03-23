@@ -1,4 +1,63 @@
-import { GameWinner, GameResult, getRoundNameFromGameId } from '../types';
+import { BracketData, GameWinner, GameResult, getRoundNameFromGameId } from '../types';
+
+/** One side of a matchup on the round page: known team or unresolved feeder game */
+export type MatchupSlot =
+  | { type: 'team'; code: string }
+  | { type: 'placeholder'; feederGameId: string };
+
+export function formatMatchupSlotLabel(slot: MatchupSlot): string {
+  return slot.type === 'team' ? slot.code : `Winner of Game ${slot.feederGameId}`;
+}
+
+function slotFromFeeder(feederGameId: string, gameWinners: GameWinner[]): MatchupSlot {
+  const w = gameWinners.find(g => g.gameId === feederGameId)?.winner;
+  if (w) return { type: 'team', code: w };
+  return { type: 'placeholder', feederGameId };
+}
+
+/**
+ * True matchup for round/game list: later rounds use feeder winners from results only
+ * (not pick_distribution). Unplayed feeder slots become "Winner of Game X".
+ */
+export function getRoundPageMatchupSlots(
+  gameId: string,
+  bracketData: BracketData | null,
+  gameResults: GameResult[],
+  gameWinners: GameWinner[]
+): [MatchupSlot, MatchupSlot] | null {
+  if (!bracketData?.games[gameId]) return null;
+
+  const result = gameResults.find(r => r.gameId === gameId);
+  if (result?.winner && result?.loser) {
+    return [
+      { type: 'team', code: result.winner },
+      { type: 'team', code: result.loser }
+    ];
+  }
+
+  const roundName = getRoundNameFromGameId(gameId);
+  if (roundName === 'ROUND_64') {
+    const dist = bracketData.games[gameId].stats.pick_distribution;
+    const codes = Object.keys(dist);
+    if (codes.length < 2) return null;
+    const ordered =
+      codes.length === 2
+        ? [...codes].sort()
+        : [...codes].sort((a, b) => {
+            const diff = (dist[b] ?? 0) - (dist[a] ?? 0);
+            return diff !== 0 ? diff : a.localeCompare(b);
+          }).slice(0, 2);
+    return [
+      { type: 'team', code: ordered[0] },
+      { type: 'team', code: ordered[1] }
+    ];
+  }
+
+  const feeders = gameToFeederGames[gameId];
+  if (!feeders || feeders.length !== 2) return null;
+
+  return [slotFromFeeder(feeders[0], gameWinners), slotFromFeeder(feeders[1], gameWinners)];
+}
 
 // Interface definitions
 export interface GameProbability {

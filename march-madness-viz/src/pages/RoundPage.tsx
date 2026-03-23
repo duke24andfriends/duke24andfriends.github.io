@@ -41,6 +41,62 @@ import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { ROUNDS } from '../types';
 import { useYearPath } from '../utils/yearRouting';
+import {
+  formatMatchupSlotLabel,
+  getRoundPageMatchupSlots,
+  type MatchupSlot
+} from '../utils/bracketLogic';
+
+/** Match table cell text: inherit TableCell body2, links match each other (underline on hover only). */
+const matchupTableLinkSx = {
+  fontSize: 'inherit',
+  fontFamily: 'inherit',
+  lineHeight: 'inherit',
+  verticalAlign: 'baseline'
+} as const;
+
+const matchupTableMutedSx = {
+  fontSize: 'inherit',
+  fontFamily: 'inherit',
+  lineHeight: 'inherit',
+  color: 'text.secondary',
+  verticalAlign: 'baseline'
+} as const;
+
+function MatchupSlotDisplay({
+  slot,
+  yearPathFn
+}: {
+  slot: MatchupSlot;
+  yearPathFn: (path: string) => string;
+}) {
+  if (slot.type === 'team') {
+    return (
+      <Link
+        component={RouterLink}
+        to={yearPathFn(`/teams/${slot.code}`)}
+        underline="hover"
+        sx={matchupTableLinkSx}
+      >
+        {slot.code}
+      </Link>
+    );
+  }
+  /* No whitespace between </Typography> and <Link> avoids a double space after "of" */
+  return (
+    <Box component="span" sx={{ display: 'inline', whiteSpace: 'normal' }}>
+      <Typography component="span" sx={matchupTableMutedSx}>Winner of </Typography>
+      <Link
+        component={RouterLink}
+        to={yearPathFn(`/games/${slot.feederGameId}`)}
+        underline="hover"
+        sx={matchupTableLinkSx}
+      >
+        Game {slot.feederGameId}
+      </Link>
+    </Box>
+  );
+}
 
 // Register ChartJS components
 ChartJS.register(
@@ -153,7 +209,7 @@ const RoundPage = () => {
     const gameWinner = gameWinners.find(winner => winner.gameId === gameId);
     const winnerTeam = gameWinner?.winner || '';
     
-    const teams = Object.keys(game.stats.pick_distribution);
+    const matchupSlots = getRoundPageMatchupSlots(gameId, bracketData, gameResults, gameWinners);
     
     // Get game result with loser
     const gameResult = gameResults.find(result => result.gameId === gameId);
@@ -171,7 +227,7 @@ const RoundPage = () => {
     
     return {
       gameId,
-      teams,
+      matchupSlots,
       completed: !!gameWinner,
       winner: winnerTeam,
       loser: gameResult?.loser || '',
@@ -213,16 +269,22 @@ const RoundPage = () => {
       }
     }
 
+    if (game?.matchupSlots) {
+      return `${formatMatchupSlotLabel(game.matchupSlots[0])} vs ${formatMatchupSlotLabel(game.matchupSlots[1])}`;
+    }
+
     return `Game ${game?.gameId}`;
   });
 
   // Keep mobile labels short but meaningful
   const shortGameAccuracyLabels = sortedGames.map(game => {
-    const leftTeam = game?.completed ? game.winner : game?.teams?.[0];
-    const rightTeam = game?.completed ? game.loser : game?.teams?.[1];
-
-    if (leftTeam && rightTeam) {
-      return `${leftTeam} v ${rightTeam}`;
+    if (game?.completed && game.winner && game.loser) {
+      return `${game.winner} v ${game.loser}`;
+    }
+    if (game?.matchupSlots) {
+      const a = formatMatchupSlotLabel(game.matchupSlots[0]);
+      const b = formatMatchupSlotLabel(game.matchupSlots[1]);
+      return `${a} v ${b}`;
     }
 
     return game?.gameId != null ? `Game ${game.gameId}` : '';
@@ -668,16 +730,38 @@ const RoundPage = () => {
                             </Button>
                           </TableCell>
                           <TableCell>
-                            {(
-                              <Stack direction="row" spacing={1}>
-                                <Link component={RouterLink} to={yearPath(`/teams/${game.completed ? game.winner : game.teams[0]}`)}>
-                                {game.completed ? game.winner : game.teams[0]}
+                            {game.completed ? (
+                              <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
+                                <Link
+                                  component={RouterLink}
+                                  to={yearPath(`/teams/${game.winner}`)}
+                                  underline="hover"
+                                  sx={matchupTableLinkSx}
+                                >
+                                  {game.winner}
                                 </Link>
-                                <Typography>vs</Typography>
-                                <Link component={RouterLink} to={yearPath(`/teams/${game.completed ? game.loser : game.teams[1]}`)}>
-                                {game.completed ? game.loser : game.teams[1]}
+                                <Typography component="span" sx={matchupTableMutedSx}>
+                                  vs
+                                </Typography>
+                                <Link
+                                  component={RouterLink}
+                                  to={yearPath(`/teams/${game.loser}`)}
+                                  underline="hover"
+                                  sx={matchupTableLinkSx}
+                                >
+                                  {game.loser}
                                 </Link>
                               </Stack>
+                            ) : game.matchupSlots ? (
+                              <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
+                                <MatchupSlotDisplay slot={game.matchupSlots[0]} yearPathFn={yearPath} />
+                                <Typography component="span" sx={matchupTableMutedSx}>
+                                  vs
+                                </Typography>
+                                <MatchupSlotDisplay slot={game.matchupSlots[1]} yearPathFn={yearPath} />
+                              </Stack>
+                            ) : (
+                              <Typography color="text.secondary">Game {game.gameId}</Typography>
                             )}
                           </TableCell>
                           {isNarrowScreen && (
