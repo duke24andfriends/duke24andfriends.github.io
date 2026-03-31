@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Box,
   Typography,
@@ -52,7 +51,6 @@ function FinalFour({
                       gameId={gameId}
                       teams={getGameTeams(gameId)}
                       seeds={getTeamSeeds(getGameTeams(gameId))}
-                      round="FINAL_FOUR"
                       actualWinner={getActualWinner(gameId)}
                       predictedWinner={getPredictedWinner(gameId)}
                       probabilityMode={probabilityMode}
@@ -79,7 +77,6 @@ function FinalFour({
                     gameId={championshipGame}
                     teams={getGameTeams(championshipGame)}
                     seeds={getTeamSeeds(getGameTeams(championshipGame))}
-                    round="CHAMPIONSHIP"
                     actualWinner={getActualWinner(championshipGame)}
                     predictedWinner={getPredictedWinner(championshipGame)}
                     probabilityMode={probabilityMode}

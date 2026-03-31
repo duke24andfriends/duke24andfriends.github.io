@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Box,
   Typography,
@@ -8,14 +7,12 @@ import {
   Slider
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import { GameWinner } from '../../types';
 import { GameProbabilities } from '../../utils/bracketLogic';
 
 interface BracketGameProps {
   gameId: string;
   teams: string[];
   seeds: (string | number)[];
-  round: string;
   actualWinner: string;
   predictedWinner: string;
   probabilityMode: boolean;
@@ -28,7 +25,6 @@ function BracketGame({
   gameId,
   teams,
   seeds,
-  round,
   actualWinner,
   predictedWinner,
   probabilityMode,
@@ -40,13 +36,18 @@ function BracketGame({
   
   return (
     <Paper 
-      elevation={1}
+      elevation={0}
       sx={{ 
-        p: 1, 
-        mb: 1, 
+        p: 1,
+        mb: 0,
+        minHeight: 108,
         position: 'relative',
-        bgcolor: 'background.paper',
-        transition: 'background-color 0.3s ease'
+        bgcolor: '#fff',
+        border: '1px solid',
+        borderColor: 'rgba(15, 23, 42, 0.10)',
+        borderRadius: 2,
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+        transition: 'box-shadow 0.2s ease'
       }}
     >
       <Stack spacing={1}>
@@ -59,11 +60,11 @@ function BracketGame({
                   p: 1, 
                   borderRadius: 1,
                   border: '1px dashed',
-                  borderColor: 'divider',
+                  borderColor: 'rgba(148, 163, 184, 0.6)',
                   opacity: 0.7
                 }}
               >
-                <Typography variant="body2">TBD</Typography>
+                <Typography variant="body2" color="text.secondary">TBD</Typography>
               </Box>
             );
           }
@@ -81,27 +82,28 @@ function BracketGame({
                 }
               }}
               sx={{ 
-                p: 1, 
+                p: 1,
                 borderRadius: 1,
                 cursor: isCompletedGame ? 'default' : 'pointer',
                 bgcolor: isWinner 
-                  ? (isCompletedGame ? 'rgba(144, 238, 144, 0.8)' : 'primary.light') 
-                  : (isLoser ? 'rgba(255, 200, 200, 0.5)' : 'background.paper'),
+                  ? (isCompletedGame ? 'rgba(34, 197, 94, 0.22)' : 'rgba(0, 153, 255, 0.18)')
+                  : (isLoser ? 'rgba(148, 163, 184, 0.18)' : 'background.paper'),
                 border: '1px solid',
                 borderColor: isWinner 
-                  ? (isCompletedGame ? 'success.dark' : 'primary.main') 
-                  : (isLoser ? 'error.light' : 'divider'),
+                  ? (isCompletedGame ? 'rgba(21, 128, 61, 0.55)' : 'rgba(0, 153, 255, 0.6)')
+                  : (isLoser ? 'rgba(148, 163, 184, 0.5)' : 'rgba(15, 23, 42, 0.12)'),
                 '&:hover': {
                   bgcolor: isCompletedGame 
-                    ? (isWinner ? 'success.main' : isLoser ? 'error.light' : 'background.paper') 
-                    : 'action.hover'
+                    ? (isWinner ? 'rgba(34, 197, 94, 0.28)' : isLoser ? 'rgba(148, 163, 184, 0.24)' : 'background.paper')
+                    : 'rgba(0, 153, 255, 0.10)',
+                  boxShadow: !isCompletedGame ? '0 2px 8px rgba(15, 23, 42, 0.10)' : 'none'
                 }
               }}
             >
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Typography variant="body2">
                   {seedText && (
-                    <Typography component="span" variant="caption" sx={{ mr: 1, fontWeight: 'bold' }}>
+                    <Typography component="span" variant="caption" sx={{ mr: 1, fontWeight: 700, color: 'text.secondary' }}>
                       {seedText}
                     </Typography>
                   )}
@@ -136,7 +138,7 @@ function BracketGame({
                 <Slider
                   size="small"
                   value={gameProbabilities[gameId]?.[team] || 0.5}
-                  onChange={(_, val) => {
+                  onChange={(_event: Event, val: number | number[]) => {
                     // Ensure value is between 0 and 1
                     const limitedVal = Math.min(Math.max(val as number, 0), 1);
                     updateGameProbability(gameId, team, limitedVal);
@@ -145,7 +147,7 @@ function BracketGame({
                   max={1}
                   step={0.05}
                   valueLabelDisplay="auto"
-                  valueLabelFormat={(value) => `${Math.round(value * 100)}%`}
+                  valueLabelFormat={(value: number) => `${Math.round(value * 100)}%`}
                   marks={[
                     { value: 0, label: '0%' },
                     { value: 0.5, label: '50%' },

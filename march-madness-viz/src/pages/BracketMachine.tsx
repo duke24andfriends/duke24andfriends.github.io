@@ -4,6 +4,7 @@ import {
   Box,
   CircularProgress,
   Grid,
+  IconButton,
   Paper,
   Stack,
   Typography,
@@ -14,6 +15,8 @@ import {
   TableHead,
   TableRow
 } from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useData } from '../context/DataContext';
 import BracketRegion from '../components/bracket/BracketRegion';
 import BracketGame from '../components/bracket/BracketGame';
@@ -30,7 +33,11 @@ import {
   calculateHypotheticalScores,
   UserNameMapping
 } from '../utils/dataProcessing';
-import { GameResult, GameWinner, UserScore } from '../types';
+import {
+  GameResult,
+  GameWinner,
+  UserScore
+} from '../types';
 
 type RankChangeRow = {
   username: string;
@@ -67,13 +74,22 @@ function buildTeamSeedMap(gameResults: GameResult[]): Record<string, number> {
 
 function enrichScores(
   scores: UserScore[],
-  bracketNameByUser: Record<string, string | undefined>
+  bracketNameByUser: Record<string, string | undefined>,
+  fullNameByUser: Record<string, string | undefined>
 ): UserScore[] {
   return scores.map((s) => {
-    const fromMap = bracketNameByUser[s.username];
+    const bracketFromMap = bracketNameByUser[s.username];
+    const fullNameFromMap = fullNameByUser[s.username];
     return {
       ...s,
-      bracketName: fromMap !== undefined && fromMap !== '' ? fromMap : s.bracketName
+      bracketName:
+        bracketFromMap !== undefined && bracketFromMap !== ''
+          ? bracketFromMap
+          : s.bracketName,
+      fullName:
+        fullNameFromMap !== undefined && fullNameFromMap !== ''
+          ? fullNameFromMap
+          : s.fullName
     };
   });
 }
@@ -90,6 +106,7 @@ function BracketMachine() {
 
   const [predictedWinners, setPredictedWinners] = useState([] as GameWinner[]);
   const [gameProbabilities, setGameProbabilities] = useState({} as GameProbabilities);
+  const [deltaPage, setDeltaPage] = useState(1);
 
   const teamSeedMap = useMemo(() => buildTeamSeedMap(gameResults), [gameResults]);
 
@@ -98,6 +115,15 @@ function BracketMachine() {
     (Object.keys(userNameMapping) as string[]).forEach((u) => {
       const row: UserNameMapping | undefined = userNameMapping[u];
       m[u] = row?.bracketName;
+    });
+    return m;
+  }, [userNameMapping]);
+
+  const fullNameByUser = useMemo(() => {
+    const m: Record<string, string | undefined> = {};
+    (Object.keys(userNameMapping) as string[]).forEach((u) => {
+      const row: UserNameMapping | undefined = userNameMapping[u];
+      m[u] = row?.fullName;
     });
     return m;
   }, [userNameMapping]);
@@ -153,22 +179,27 @@ function BracketMachine() {
 
   const baselineScores = useMemo(() => {
     if (!bracketData) return [];
-    return enrichScores(calculateHypotheticalScores(bracketData, gameWinners, []), bracketNameByUser);
-  }, [bracketData, gameWinners, bracketNameByUser]);
+    return enrichScores(
+      calculateHypotheticalScores(bracketData, gameWinners, []),
+      bracketNameByUser,
+      fullNameByUser
+    );
+  }, [bracketData, gameWinners, bracketNameByUser, fullNameByUser]);
 
   const scenarioScores = useMemo(() => {
     if (!bracketData) return [];
     return enrichScores(
       calculateHypotheticalScores(bracketData, gameWinners, predictedWinners),
-      bracketNameByUser
+      bracketNameByUser,
+      fullNameByUser
     );
-  }, [bracketData, gameWinners, predictedWinners, bracketNameByUser]);
+  }, [bracketData, gameWinners, predictedWinners, bracketNameByUser, fullNameByUser]);
 
   const rankChanges = useMemo((): RankChangeRow[] => {
     if (predictedWinners.length === 0) return [];
     const baseRank = buildCompetitionRanks(baselineScores);
     const scenRank = buildCompetitionRanks(scenarioScores);
-    return scenarioScores.slice(0, 40).map((u: UserScore): RankChangeRow => {
+    return scenarioScores.map((u: UserScore): RankChangeRow => {
       const br = baseRank.get(u.username) ?? 999;
       const sr = scenRank.get(u.username) ?? 999;
       return {
@@ -182,6 +213,30 @@ function BracketMachine() {
       };
     });
   }, [baselineScores, scenarioScores, predictedWinners.length]);
+
+  const deltaRows = useMemo(
+    () =>
+      rankChanges
+        .filter((r: RankChangeRow) => r.delta !== 0)
+        .sort((a: RankChangeRow, b: RankChangeRow) => b.delta - a.delta),
+    [rankChanges]
+  );
+  const deltaPageSize = 25;
+  const deltaTotalPages = Math.max(1, Math.ceil(deltaRows.length / deltaPageSize));
+  const deltaStart = (deltaPage - 1) * deltaPageSize;
+  const pagedDeltaRows = deltaRows.slice(deltaStart, deltaStart + deltaPageSize);
+  const deltaPagesToShow = useMemo(() => {
+    if (deltaTotalPages <= 7) {
+      return Array.from({ length: deltaTotalPages }, (_, i) => i + 1);
+    }
+    if (deltaPage <= 4) {
+      return [1, 2, 3, 4, 5, -1, deltaTotalPages];
+    }
+    if (deltaPage >= deltaTotalPages - 3) {
+      return [1, -1, deltaTotalPages - 4, deltaTotalPages - 3, deltaTotalPages - 2, deltaTotalPages - 1, deltaTotalPages];
+    }
+    return [1, -1, deltaPage - 1, deltaPage, deltaPage + 1, -1, deltaTotalPages];
+  }, [deltaPage, deltaTotalPages]);
 
   if (loading || error || !bracketData) {
     return (
@@ -213,42 +268,95 @@ function BracketMachine() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Bracket machine
-      </Typography>
-      <Typography variant="body2" color="text.secondary" paragraph>
-        Completed games follow your CSV results. Click a team on any unfinished game to try a winner;
-        the leaderboards compare live scores to your scenario. Reset clears only your picks.
+      <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: 0.2 }} gutterBottom>
+        Bracket Machine
       </Typography>
 
       <BracketControls
         resetPredictions={resetPredictions}
       />
 
-      <Grid container spacing={2}>
+      <Grid container spacing={2.5}>
         <Grid item xs={12} lg={8}>
-          <Stack spacing={2}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <Grid container spacing={1} sx={{ px: 1.5 }}>
+          <Stack spacing={2.5}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 1.5,
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'rgba(15, 23, 42, 0.10)',
+                bgcolor: 'rgba(248, 250, 252, 0.7)'
+              }}
+            >
+              <Grid container spacing={1} sx={{ px: 1 }}>
                   <Grid item xs={6}>
                     <Grid container>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary">Round of 64</Typography></Grid>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary">Round of 32</Typography></Grid>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary">Sweet 16</Typography></Grid>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary">Elite 8</Typography></Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Round of 64</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 19-20</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>10 pts</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Round of 32</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 21-22</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>20 pts</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Sweet 16</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 26-27</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>40 pts</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Elite 8</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 28-29</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>80 pts</Typography>
+                        </Box>
+                      </Grid>
                     </Grid>
                   </Grid>
                   <Grid item xs={6}>
                     <Grid container>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary" align="right" display="block">Elite 8</Typography></Grid>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary" align="right" display="block">Sweet 16</Typography></Grid>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary" align="right" display="block">Round of 32</Typography></Grid>
-                      <Grid item xs={3}><Typography variant="caption" color="text.secondary" align="right" display="block">Round of 64</Typography></Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Elite 8</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 28-29</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>80 pts</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Sweet 16</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 26-27</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>40 pts</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Round of 32</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 21-22</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>20 pts</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={3}>
+                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Round of 64</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 19-20</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>10 pts</Typography>
+                        </Box>
+                      </Grid>
                     </Grid>
                   </Grid>
-                </Grid>
               </Grid>
+            </Paper>
+            <Grid container spacing={2}>
               <BracketRegion
                 regionKey={regionLayout.topLeft.key}
                 title={regionLayout.topLeft.title}
@@ -265,18 +373,31 @@ function BracketMachine() {
               />
             </Grid>
 
-            <Paper elevation={1} sx={{ p: 2 }}>
-              <Typography variant="subtitle1" gutterBottom align="center">
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2.5,
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'rgba(15, 23, 42, 0.10)',
+                boxShadow: '0 12px 28px rgba(15, 23, 42, 0.06)',
+                background:
+                  'radial-gradient(ellipse at top, rgba(0, 153, 255, 0.05) 0%, rgba(255, 255, 255, 1) 52%)'
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: 700 }} gutterBottom align="center">
                 {finalFour.name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" align="center" sx={{ display: 'block', mb: 2 }}>
+                Apr 4 • 160 pts each semifinal
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" alignItems="stretch">
                 {finalFour.games.map((gameId) => (
-                  <Box key={gameId} sx={{ flex: 1, maxWidth: { sm: 220 }, mx: 'auto', width: '100%' }}>
+                  <Box key={gameId} sx={{ flex: 1, maxWidth: { sm: 260 }, mx: 'auto', width: '100%' }}>
                     <BracketGame
                       gameId={gameId}
                       teams={getGameTeams(gameId)}
                       seeds={getTeamSeeds(getGameTeams(gameId))}
-                      round="FINAL_FOUR"
                       actualWinner={getActualWinner(gameId)}
                       predictedWinner={getPredictedWinner(gameId)}
                       probabilityMode={false}
@@ -287,14 +408,16 @@ function BracketMachine() {
                   </Box>
                 ))}
               </Stack>
-              <Box sx={{ maxWidth: 240, mx: 'auto', mt: 2 }}>
+              <Typography variant="caption" color="text.secondary" align="center" sx={{ display: 'block', mt: 1, fontWeight: 600 }}>
+                Championship • Apr 6 • 320 pts
+              </Typography>
+              <Box sx={{ maxWidth: 280, mx: 'auto', mt: 1 }}>
                 {finalFour.championship.map((gameId) => (
                   <BracketGame
                     key={gameId}
                     gameId={gameId}
                     teams={getGameTeams(gameId)}
                     seeds={getTeamSeeds(getGameTeams(gameId))}
-                    round="CHAMPIONSHIP"
                     actualWinner={getActualWinner(gameId)}
                     predictedWinner={getPredictedWinner(gameId)}
                     probabilityMode={false}
@@ -328,25 +451,25 @@ function BracketMachine() {
         <Grid item xs={12} lg={4}>
           <Stack spacing={2}>
             <BracketLeaderboard
-              userScores={baselineScores}
-              probabilityMode={false}
-              title="Current (from results)"
-              maxHeight="min(340px, 40vh)"
-            />
-            <BracketLeaderboard
               userScores={scenarioScores}
               probabilityMode={false}
               title={
                 predictedWinners.length
-                  ? 'With your picks'
-                  : 'With your picks (same as current)'
+                  ? 'Scenario Leaderboard'
+                  : 'Scenario Leaderboard (same as current)'
               }
+              maxHeight="min(340px, 40vh)"
+            />
+            <BracketLeaderboard
+              userScores={baselineScores}
+              probabilityMode={false}
+              title="Official Leaderboard"
               maxHeight="min(340px, 40vh)"
             />
             {predictedWinners.length > 0 && (
               <Paper sx={{ p: 2 }}>
                 <Typography variant="subtitle1" gutterBottom>
-                  Rank vs current
+                  Biggest Movers vs Official
                 </Typography>
                 <Typography variant="caption" color="text.secondary" display="block" paragraph>
                   Ties share the same rank. Δ rank is positive when you move up.
@@ -362,11 +485,7 @@ function BracketMachine() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {rankChanges
-                        .filter((r: RankChangeRow) => r.delta !== 0)
-                        .sort((a: RankChangeRow, b: RankChangeRow) => b.delta - a.delta)
-                        .slice(0, 12)
-                        .map((r: RankChangeRow) => (
+                      {pagedDeltaRows.map((r: RankChangeRow) => (
                           <TableRow key={r.username}>
                             <TableCell
                               sx={{
@@ -386,6 +505,50 @@ function BracketMachine() {
                     </TableBody>
                   </Table>
                 </TableContainer>
+                {deltaTotalPages > 1 && (
+                  <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center" sx={{ mt: 1 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setDeltaPage((p: number) => Math.max(1, p - 1))}
+                      disabled={deltaPage === 1}
+                    >
+                      <ChevronLeftIcon fontSize="small" />
+                    </IconButton>
+                    {deltaPagesToShow.map((p: number, idx: number) =>
+                      p === -1 ? (
+                        <Box key={`delta-ellipsis-${idx}`} sx={{ px: 0.75, color: 'text.secondary', fontSize: 14 }}>
+                          ...
+                        </Box>
+                      ) : (
+                        <Box
+                          key={`delta-page-${p}`}
+                          onClick={() => setDeltaPage(p)}
+                          sx={{
+                            px: 1.25,
+                            py: 0.25,
+                            borderRadius: 1,
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            fontWeight: deltaPage === p ? 700 : 500,
+                            color: deltaPage === p ? 'primary.main' : 'text.secondary',
+                            border: '1px solid',
+                            borderColor: deltaPage === p ? 'primary.main' : 'transparent',
+                            '&:hover': { bgcolor: 'action.hover' }
+                          }}
+                        >
+                          {p}
+                        </Box>
+                      )
+                    )}
+                    <IconButton
+                      size="small"
+                      onClick={() => setDeltaPage((p: number) => Math.min(deltaTotalPages, p + 1))}
+                      disabled={deltaPage === deltaTotalPages}
+                    >
+                      <ChevronRightIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                )}
               </Paper>
             )}
           </Stack>
