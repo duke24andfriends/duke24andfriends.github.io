@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   IconButton,
+  InputAdornment,
+  TextField,
   Stack,
   Typography,
   Table,
@@ -14,6 +16,7 @@ import {
 } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SearchIcon from '@mui/icons-material/Search';
 import { UserScore } from '../../types';
 
 interface BracketLeaderboardProps {
@@ -42,8 +45,35 @@ function BracketLeaderboard({
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState('scenario' as 'scenario' | 'current');
   const [sortDirection, setSortDirection] = useState('desc' as 'asc' | 'desc');
-  const totalPages = Math.max(1, Math.ceil(userScores.length / pageSize));
+  const [searchTerm, setSearchTerm] = useState('');
 
+  const start = (page - 1) * pageSize;
+  const sortedScores = useMemo(() => {
+    const direction = sortDirection === 'desc' ? -1 : 1;
+    return [...userScores].sort((a, b) => {
+      const aScenario = a.score ?? 0;
+      const bScenario = b.score ?? 0;
+      const aCurrent = currentScoreByUser?.[a.username] ?? 0;
+      const bCurrent = currentScoreByUser?.[b.username] ?? 0;
+      const primaryA = sortKey === 'scenario' ? aScenario : aCurrent;
+      const primaryB = sortKey === 'scenario' ? bScenario : bCurrent;
+      if (primaryA !== primaryB) return (primaryA - primaryB) * direction;
+      if (aScenario !== bScenario) return (aScenario - bScenario) * direction;
+      return a.username.localeCompare(b.username);
+    });
+  }, [userScores, currentScoreByUser, sortKey, sortDirection]);
+  const filteredScores = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return sortedScores;
+    return sortedScores.filter((u: UserScore & { winProbability?: number }) => {
+      const fullName = (u.fullName || '').toLowerCase();
+      const bracketName = (u.bracketName || '').toLowerCase();
+      const username = (u.username || '').toLowerCase();
+      return fullName.includes(q) || bracketName.includes(q) || username.includes(q);
+    });
+  }, [sortedScores, searchTerm]);
+  const totalPages = Math.max(1, Math.ceil(filteredScores.length / pageSize));
+  const rows = filteredScores.slice(start, start + pageSize);
   useEffect(() => {
     if (page > totalPages) {
       setPage(totalPages);
@@ -62,23 +92,25 @@ function BracketLeaderboard({
     }
     return [1, -1, page - 1, page, page + 1, -1, totalPages];
   }, [page, totalPages]);
-
-  const start = (page - 1) * pageSize;
-  const sortedScores = useMemo(() => {
-    const direction = sortDirection === 'desc' ? -1 : 1;
-    return [...userScores].sort((a, b) => {
-      const aScenario = a.score ?? 0;
-      const bScenario = b.score ?? 0;
-      const aCurrent = currentScoreByUser?.[a.username] ?? 0;
-      const bCurrent = currentScoreByUser?.[b.username] ?? 0;
-      const primaryA = sortKey === 'scenario' ? aScenario : aCurrent;
-      const primaryB = sortKey === 'scenario' ? bScenario : bCurrent;
-      if (primaryA !== primaryB) return (primaryA - primaryB) * direction;
-      if (aScenario !== bScenario) return (aScenario - bScenario) * direction;
-      return a.username.localeCompare(b.username);
-    });
-  }, [userScores, currentScoreByUser, sortKey, sortDirection]);
-  const rows = sortedScores.slice(start, start + pageSize);
+  const globalRankByUser = useMemo(() => {
+    const ranks = new Map<string, number>();
+    let currentRank = 1;
+    for (let i = 0; i < sortedScores.length; i += 1) {
+      const row = sortedScores[i];
+      if (i > 0) {
+        const prev = sortedScores[i - 1];
+        const rowCurrent = currentScoreByUser?.[row.username] ?? 0;
+        const prevCurrent = currentScoreByUser?.[prev.username] ?? 0;
+        const rowPrimary = sortKey === 'scenario' ? (row.score ?? 0) : rowCurrent;
+        const prevPrimary = sortKey === 'scenario' ? (prev.score ?? 0) : prevCurrent;
+        if (rowPrimary !== prevPrimary) {
+          currentRank = i + 1;
+        }
+      }
+      ranks.set(row.username, currentRank);
+    }
+    return ranks;
+  }, [sortedScores, currentScoreByUser, sortKey]);
 
   const onSort = (nextKey: 'scenario' | 'current') => {
     if (sortKey === nextKey) {
@@ -94,6 +126,24 @@ function BracketLeaderboard({
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
         {title}
       </Typography>
+      <TextField
+        fullWidth
+        size="small"
+        placeholder="Search by username, bracket name, or real name..."
+        value={searchTerm}
+        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+          setSearchTerm(e.target.value);
+          setPage(1);
+        }}
+        sx={{ mb: 1.25 }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon fontSize="small" />
+            </InputAdornment>
+          )
+        }}
+      />
       <TableContainer component={Paper} sx={{ maxHeight, overflow: 'auto' }}>
         <Table size="small" stickyHeader>
           <TableHead>
@@ -125,12 +175,17 @@ function BracketLeaderboard({
             {rows.map((user: UserScore & { winProbability?: number }, index: number) => {
               const globalIndex = start + index;
               const userCurrent = currentScoreByUser?.[user.username] ?? 0;
-              const prevCurrent = globalIndex > 0 ? (currentScoreByUser?.[sortedScores[globalIndex - 1].username] ?? 0) : 0;
+              const prevInFull = globalIndex > 0 ? sortedScores[globalIndex - 1] : undefined;
+              const prevCurrent = prevInFull ? (currentScoreByUser?.[prevInFull.username] ?? 0) : 0;
               const currentValue = sortKey === 'scenario' ? user.score : userCurrent;
-              const prevValue = sortKey === 'scenario' ? sortedScores[globalIndex - 1]?.score : prevCurrent;
+              const prevValue = sortKey === 'scenario' ? prevInFull?.score : prevCurrent;
               const tiedWithPrevious =
                 globalIndex > 0 && prevValue === currentValue;
-              const rankLabel = tiedWithPrevious ? '' : String(globalIndex + 1);
+              const rankLabel = searchTerm.trim()
+                ? String(globalRankByUser.get(user.username) ?? globalIndex + 1)
+                : tiedWithPrevious
+                ? ''
+                : String(globalIndex + 1);
 
               return (
                 <TableRow key={user.username}>
