@@ -52,7 +52,7 @@ const Layout = ({ children, year }: { children: any; year: string }) => {
     { name: 'Pool Analysis', path: getYearPath(year, '/pool-analysis') },
     { name: 'Leaderboard', path: getYearPath(year, '/leaderboard') },
     ...(year === '2026'
-      ? [{ name: 'Bracket machine', path: getYearPath(year, '/bracket-machine') }]
+      ? [{ name: 'Bracket Machine', path: getYearPath(year, '/bracket-machine') }]
       : []),
   ];
 

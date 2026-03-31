@@ -16,6 +16,8 @@ function BracketControls({
         variant="outlined" 
         onClick={resetPredictions}
         color="secondary"
+        size="small"
+        sx={{ px: { xs: 1.5, sm: 2 }, py: { xs: 0.5, sm: 0.75 }, fontSize: { xs: '0.82rem', sm: '0.875rem' } }}
       >
         Reset All Picks
       </Button>

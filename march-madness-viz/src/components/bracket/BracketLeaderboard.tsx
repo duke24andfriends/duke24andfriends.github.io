@@ -21,16 +21,27 @@ interface BracketLeaderboardProps {
   probabilityMode: boolean;
   title?: string;
   maxHeight?: string | number;
+  currentScoreByUser?: Record<string, number>;
+  scoreLabel?: string;
+}
+
+function truncateName(value: string, maxLength: number): string {
+  if (!value) return '';
+  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
 function BracketLeaderboard({
   userScores,
   probabilityMode,
-  title = "Projected Leaderboard",
-  maxHeight = 'calc(100vh - 320px)'
+  title = "Leaderboard",
+  maxHeight = 'calc(100vh - 320px)',
+  currentScoreByUser,
+  scoreLabel = 'Scenario'
 }: BracketLeaderboardProps) {
   const pageSize = 25;
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState('scenario' as 'scenario' | 'current');
+  const [sortDirection, setSortDirection] = useState('desc' as 'asc' | 'desc');
   const totalPages = Math.max(1, Math.ceil(userScores.length / pageSize));
 
   useEffect(() => {
@@ -53,49 +64,102 @@ function BracketLeaderboard({
   }, [page, totalPages]);
 
   const start = (page - 1) * pageSize;
-  const rows = userScores.slice(start, start + pageSize);
+  const sortedScores = useMemo(() => {
+    const direction = sortDirection === 'desc' ? -1 : 1;
+    return [...userScores].sort((a, b) => {
+      const aScenario = a.score ?? 0;
+      const bScenario = b.score ?? 0;
+      const aCurrent = currentScoreByUser?.[a.username] ?? 0;
+      const bCurrent = currentScoreByUser?.[b.username] ?? 0;
+      const primaryA = sortKey === 'scenario' ? aScenario : aCurrent;
+      const primaryB = sortKey === 'scenario' ? bScenario : bCurrent;
+      if (primaryA !== primaryB) return (primaryA - primaryB) * direction;
+      if (aScenario !== bScenario) return (aScenario - bScenario) * direction;
+      return a.username.localeCompare(b.username);
+    });
+  }, [userScores, currentScoreByUser, sortKey, sortDirection]);
+  const rows = sortedScores.slice(start, start + pageSize);
+
+  const onSort = (nextKey: 'scenario' | 'current') => {
+    if (sortKey === nextKey) {
+      setSortDirection((prev: 'asc' | 'desc') => (prev === 'desc' ? 'asc' : 'desc'));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection('desc');
+  };
 
   return (
-    <Paper sx={{ p: 2, mb: 2, maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
-      <Typography variant="h6" gutterBottom>
+    <Paper sx={{ p: { xs: 1, sm: 1.5 }, mb: 2, overflowY: 'auto' }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
         {title}
       </Typography>
-      
-      <TableContainer component={Paper} sx={{ maxHeight, overflowY: 'auto' }}>
+      <TableContainer component={Paper} sx={{ maxHeight, overflow: 'auto' }}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell>Rank</TableCell>
-              <TableCell>User</TableCell>
-              <TableCell align="right">Score</TableCell>
+              <TableCell sx={{ px: { xs: 0.75, sm: 2 }, py: 1 }}>Rank</TableCell>
+              <TableCell sx={{ px: { xs: 0.75, sm: 2 }, py: 1 }}>User</TableCell>
+              <TableCell
+                align="right"
+                onClick={() => onSort('scenario')}
+                sx={{ px: { xs: 0.75, sm: 2 }, py: 1, cursor: 'pointer', userSelect: 'none' }}
+              >
+                {scoreLabel} {sortKey === 'scenario' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </TableCell>
+              {currentScoreByUser && (
+                <TableCell
+                  align="right"
+                  onClick={() => onSort('current')}
+                  sx={{ px: { xs: 0.75, sm: 2 }, py: 1, cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Current {sortKey === 'current' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                </TableCell>
+              )}
               {probabilityMode && (
-                <TableCell align="right">Win%</TableCell>
+                <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 1 }}>Win%</TableCell>
               )}
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((user, index) => {
+            {rows.map((user: UserScore & { winProbability?: number }, index: number) => {
               const globalIndex = start + index;
+              const userCurrent = currentScoreByUser?.[user.username] ?? 0;
+              const prevCurrent = globalIndex > 0 ? (currentScoreByUser?.[sortedScores[globalIndex - 1].username] ?? 0) : 0;
+              const currentValue = sortKey === 'scenario' ? user.score : userCurrent;
+              const prevValue = sortKey === 'scenario' ? sortedScores[globalIndex - 1]?.score : prevCurrent;
               const tiedWithPrevious =
-                globalIndex > 0 && userScores[globalIndex - 1].score === user.score;
+                globalIndex > 0 && prevValue === currentValue;
               const rankLabel = tiedWithPrevious ? '' : String(globalIndex + 1);
 
               return (
                 <TableRow key={user.username}>
-                  <TableCell>{rankLabel}</TableCell>
+                  <TableCell sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
+                    {rankLabel}
+                  </TableCell>
                   <TableCell 
                     sx={{ 
-                      maxWidth: 120, 
+                      maxWidth: { xs: 116, sm: 160 },
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      px: { xs: 0.75, sm: 2 },
+                      py: 0.85,
+                      fontSize: { xs: '0.94rem', sm: '1rem' }
                     }}
                   >
-                    {user.fullName || user.bracketName || user.username}
+                    {truncateName(user.fullName || user.bracketName || user.username, 16)}
                   </TableCell>
-                  <TableCell align="right">{user.score || 0}</TableCell>
+                  <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
+                    {user.score || 0}
+                  </TableCell>
+                  {currentScoreByUser && (
+                    <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
+                      {currentScoreByUser[user.username] ?? 0}
+                    </TableCell>
+                  )}
                   {probabilityMode && (
-                    <TableCell align="right">
+                    <TableCell align="right" sx={{ px: { xs: 1, sm: 2 }, py: 0.9, fontSize: { xs: '0.96rem', sm: '1rem' } }}>
                       {(user.winProbability ?? 0).toFixed(1)}%
                     </TableCell>
                   )}

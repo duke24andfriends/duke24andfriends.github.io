@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   Box,
@@ -48,6 +48,29 @@ type RankChangeRow = {
   baseScore: number;
   scenScore: number;
 };
+
+type MobileRoundKey =
+  | 'ROUND_64'
+  | 'ROUND_32'
+  | 'SWEET_16'
+  | 'ELITE_8'
+  | 'FINAL_FOUR'
+  | 'CHAMPIONSHIP';
+
+const MOBILE_ROUNDS: Array<{
+  key: MobileRoundKey;
+  label: string;
+  date: string;
+  points: string;
+}> = [
+  { key: 'ROUND_64', label: 'Round of 64', date: 'Mar 19-20', points: '10 pts' },
+  { key: 'ROUND_32', label: 'Round of 32', date: 'Mar 21-22', points: '20 pts' },
+  { key: 'SWEET_16', label: 'Sweet 16', date: 'Mar 26-27', points: '40 pts' },
+  { key: 'ELITE_8', label: 'Elite 8', date: 'Mar 28-29', points: '80 pts' },
+  { key: 'FINAL_FOUR', label: 'Final Four', date: 'Apr 4', points: '160 pts' },
+  { key: 'CHAMPIONSHIP', label: 'Championship', date: 'Apr 6', points: '320 pts' }
+];
+const AUTO_ADVANCED_BASE_ROUNDS: MobileRoundKey[] = ['ROUND_64', 'ROUND_32', 'SWEET_16', 'ELITE_8'];
 
 function buildCompetitionRanks(scores: UserScore[]): Map<string, number> {
   const rankByUser = new Map<string, number>();
@@ -107,6 +130,12 @@ function BracketMachine() {
   const [predictedWinners, setPredictedWinners] = useState([] as GameWinner[]);
   const [gameProbabilities, setGameProbabilities] = useState({} as GameProbabilities);
   const [deltaPage, setDeltaPage] = useState(1);
+  const [mobileRoundIndex, setMobileRoundIndex] = useState(4);
+  const [touchStartX, setTouchStartX] = useState(null as number | null);
+  const [mobileSlideDirection, setMobileSlideDirection] = useState('next' as 'next' | 'prev');
+  const [autoAdvancedRounds, setAutoAdvancedRounds] = useState(
+    new Set(AUTO_ADVANCED_BASE_ROUNDS) as Set<MobileRoundKey>
+  );
 
   const teamSeedMap = useMemo(() => buildTeamSeedMap(gameResults), [gameResults]);
 
@@ -175,6 +204,8 @@ function BracketMachine() {
   const resetPredictions = useCallback(() => {
     setPredictedWinners([]);
     setGameProbabilities({});
+    setMobileRoundIndex(4);
+    setAutoAdvancedRounds(new Set(AUTO_ADVANCED_BASE_ROUNDS) as Set<MobileRoundKey>);
   }, []);
 
   const baselineScores = useMemo(() => {
@@ -213,6 +244,14 @@ function BracketMachine() {
       };
     });
   }, [baselineScores, scenarioScores, predictedWinners.length]);
+  const currentScoreByUser = useMemo(
+    () =>
+      baselineScores.reduce((acc: Record<string, number>, row: UserScore) => {
+        acc[row.username] = row.score;
+        return acc;
+      }, {}),
+    [baselineScores]
+  );
 
   const deltaRows = useMemo(
     () =>
@@ -238,14 +277,6 @@ function BracketMachine() {
     return [1, -1, deltaPage - 1, deltaPage, deltaPage + 1, -1, deltaTotalPages];
   }, [deltaPage, deltaTotalPages]);
 
-  if (loading || error || !bracketData) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-        {loading ? <CircularProgress /> : <Alert severity="error">{error || 'No data'}</Alert>}
-      </Box>
-    );
-  }
-
   const regions = getBracketRegions();
   const finalFour = regions.FINAL_FOUR;
   const regionLayout = {
@@ -266,19 +297,259 @@ function BracketMachine() {
     updateGameProbability: handleGameProbability
   };
 
+  const mobileRound = MOBILE_ROUNDS[mobileRoundIndex];
+
+  const regionKeyOrder = [
+    regionLayout.topLeft.key,
+    regionLayout.topRight.key,
+    regionLayout.bottomLeft.key,
+    regionLayout.bottomRight.key
+  ] as const;
+  const regionTitleByKey: Record<string, string> = {
+    [regionLayout.topLeft.key]: regionLayout.topLeft.title,
+    [regionLayout.topRight.key]: regionLayout.topRight.title,
+    [regionLayout.bottomLeft.key]: regionLayout.bottomLeft.title,
+    [regionLayout.bottomRight.key]: regionLayout.bottomRight.title
+  };
+
+  const mobileRoundGroups = useMemo(() => {
+    if (mobileRound.key === 'FINAL_FOUR') {
+      return [{ title: 'Final Four', gameIds: finalFour.games }];
+    }
+    if (mobileRound.key === 'CHAMPIONSHIP') {
+      return [{ title: 'Championship', gameIds: finalFour.championship }];
+    }
+
+    const roundKeyMap: Record<'ROUND_64' | 'ROUND_32' | 'SWEET_16' | 'ELITE_8', 'round64' | 'round32' | 'sweet16' | 'elite8'> = {
+      ROUND_64: 'round64',
+      ROUND_32: 'round32',
+      SWEET_16: 'sweet16',
+      ELITE_8: 'elite8'
+    };
+    const k = roundKeyMap[mobileRound.key as 'ROUND_64' | 'ROUND_32' | 'SWEET_16' | 'ELITE_8'];
+    return regionKeyOrder.map((rk) => ({
+      title: `${regionTitleByKey[rk]} Region`,
+      gameIds: regions[rk][k]
+    }));
+  }, [mobileRound.key, finalFour.games, finalFour.championship, regionKeyOrder, regionTitleByKey, regions]);
+
+  const goMobilePrev = () => {
+    setMobileSlideDirection('prev');
+    setMobileRoundIndex((i: number) => Math.max(0, i - 1));
+  };
+  const goMobileNext = () => {
+    setMobileSlideDirection('next');
+    setMobileRoundIndex((i: number) => Math.min(MOBILE_ROUNDS.length - 1, i + 1));
+  };
+  const onMobileTouchStart = (x: number) => setTouchStartX(x);
+  const onMobileTouchEnd = (x: number) => {
+    if (touchStartX === null) return;
+    const delta = x - touchStartX;
+    if (Math.abs(delta) < 40) {
+      setTouchStartX(null);
+      return;
+    }
+    if (delta > 0) {
+      goMobilePrev();
+    } else {
+      goMobileNext();
+    }
+    setTouchStartX(null);
+  };
+
+  const getRoundGameIds = useCallback((roundKey: MobileRoundKey): string[] => {
+    if (roundKey === 'FINAL_FOUR') return finalFour.games;
+    if (roundKey === 'CHAMPIONSHIP') return finalFour.championship;
+    if (roundKey === 'ROUND_64') {
+      return [
+        ...regions[regionLayout.topLeft.key].round64,
+        ...regions[regionLayout.topRight.key].round64,
+        ...regions[regionLayout.bottomLeft.key].round64,
+        ...regions[regionLayout.bottomRight.key].round64
+      ];
+    }
+    if (roundKey === 'ROUND_32') {
+      return [
+        ...regions[regionLayout.topLeft.key].round32,
+        ...regions[regionLayout.topRight.key].round32,
+        ...regions[regionLayout.bottomLeft.key].round32,
+        ...regions[regionLayout.bottomRight.key].round32
+      ];
+    }
+    if (roundKey === 'SWEET_16') {
+      return [
+        ...regions[regionLayout.topLeft.key].sweet16,
+        ...regions[regionLayout.topRight.key].sweet16,
+        ...regions[regionLayout.bottomLeft.key].sweet16,
+        ...regions[regionLayout.bottomRight.key].sweet16
+      ];
+    }
+    return [
+      ...regions[regionLayout.topLeft.key].elite8,
+      ...regions[regionLayout.topRight.key].elite8,
+      ...regions[regionLayout.bottomLeft.key].elite8,
+      ...regions[regionLayout.bottomRight.key].elite8
+    ];
+  }, [finalFour.games, finalFour.championship, regions, regionLayout]);
+
+  useEffect(() => {
+    const currentRound = MOBILE_ROUNDS[mobileRoundIndex]?.key;
+    if (!currentRound || currentRound === 'CHAMPIONSHIP') return;
+    if (autoAdvancedRounds.has(currentRound)) return;
+
+    const actualWinnerByGame = new Map(gameWinners.map((g: GameWinner) => [g.gameId, g.winner]));
+    const predictedWinnerByGame = new Map(predictedWinners.map((g: GameWinner) => [g.gameId, g.winner]));
+    const gameIds = getRoundGameIds(currentRound);
+    const isRoundComplete = gameIds.every(
+      (gameId: string) => !!actualWinnerByGame.get(gameId) || !!predictedWinnerByGame.get(gameId)
+    );
+    if (!isRoundComplete) return;
+
+    setAutoAdvancedRounds((prev: Set<MobileRoundKey>) => {
+      const next = new Set(prev);
+      next.add(currentRound);
+      return next;
+    });
+    setMobileSlideDirection('next');
+    setMobileRoundIndex((idx: number) => Math.min(MOBILE_ROUNDS.length - 1, idx + 1));
+  }, [mobileRoundIndex, autoAdvancedRounds, gameWinners, predictedWinners, getRoundGameIds]);
+
+  if (loading || error || !bracketData) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        {loading ? <CircularProgress /> : <Alert severity="error">{error || 'No data'}</Alert>}
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: 0.2 }} gutterBottom>
         Bracket Machine
       </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 920 }}>
+        Explore bracket outcomes by tapping winners and immediately see how standings shift.
+      </Typography>
 
-      <BracketControls
-        resetPredictions={resetPredictions}
-      />
+      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+        <BracketControls
+          resetPredictions={resetPredictions}
+        />
+      </Box>
 
       <Grid container spacing={2.5}>
         <Grid item xs={12} lg={8}>
           <Stack spacing={2.5}>
+            <Box sx={{ display: { xs: 'block', lg: 'none' } }}>
+              <BracketLeaderboard
+                userScores={scenarioScores}
+                probabilityMode={false}
+                title="Leaderboard"
+                maxHeight={214}
+                currentScoreByUser={currentScoreByUser}
+                scoreLabel="Scenario"
+              />
+            </Box>
+            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+              <BracketControls
+                resetPredictions={resetPredictions}
+              />
+            </Box>
+            <Box
+              sx={{ display: { xs: 'block', md: 'none' } }}
+              onTouchStart={(e: any) => onMobileTouchStart(e.touches[0].clientX)}
+              onTouchEnd={(e: any) => onMobileTouchEnd(e.changedTouches[0].clientX)}
+            >
+              <Box
+                key={`mobile-round-${mobileRoundIndex}`}
+                sx={{
+                  animation: `${mobileSlideDirection === 'next' ? 'mobileSlideLeft' : 'mobileSlideRight'} 240ms cubic-bezier(0.22, 1, 0.36, 1)`,
+                  '@keyframes mobileSlideLeft': {
+                    from: { opacity: 0.7, transform: 'translateX(16px)' },
+                    to: { opacity: 1, transform: 'translateX(0)' }
+                  },
+                  '@keyframes mobileSlideRight': {
+                    from: { opacity: 0.7, transform: 'translateX(-16px)' },
+                    to: { opacity: 1, transform: 'translateX(0)' }
+                  }
+                }}
+              >
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 1.25,
+                    mb: 1.25,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'rgba(15, 23, 42, 0.10)',
+                    bgcolor: 'rgba(248, 250, 252, 0.7)'
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <IconButton size="small" onClick={goMobilePrev} disabled={mobileRoundIndex === 0}>
+                      <ChevronLeftIcon fontSize="small" />
+                    </IconButton>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        {mobileRound.label}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {mobileRound.date}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {mobileRound.points}
+                      </Typography>
+                    </Box>
+                    <IconButton
+                      size="small"
+                      onClick={goMobileNext}
+                      disabled={mobileRoundIndex === MOBILE_ROUNDS.length - 1}
+                    >
+                      <ChevronRightIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                </Paper>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, px: 0.25 }}>
+                  Swipe left or right to move between rounds.
+                </Typography>
+                <Stack spacing={1.25}>
+                  {mobileRoundGroups.map((group: { title: string; gameIds: string[] }) => (
+                    <Paper
+                      key={group.title}
+                      elevation={0}
+                      sx={{
+                        p: 1.25,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'rgba(15, 23, 42, 0.10)'
+                      }}
+                    >
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                        {group.title}
+                      </Typography>
+                      <Stack spacing={1}>
+                        {group.gameIds.map((gameId: string) => (
+                          <BracketGame
+                            key={`mobile-${group.title}-${gameId}`}
+                            gameId={gameId}
+                            teams={getGameTeams(gameId)}
+                            seeds={getTeamSeeds(getGameTeams(gameId))}
+                            actualWinner={getActualWinner(gameId)}
+                            predictedWinner={getPredictedWinner(gameId)}
+                            probabilityMode={false}
+                            gameProbabilities={gameProbabilities}
+                            updatePredictedWinner={handlePredictedWinner}
+                            updateGameProbability={handleGameProbability}
+                          />
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Box>
+            </Box>
+
+            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
             <Paper
               elevation={0}
               sx={{
@@ -445,27 +716,22 @@ function BracketMachine() {
                 {...regionProps}
               />
             </Grid>
+            </Box>
           </Stack>
         </Grid>
 
         <Grid item xs={12} lg={4}>
           <Stack spacing={2}>
-            <BracketLeaderboard
-              userScores={scenarioScores}
-              probabilityMode={false}
-              title={
-                predictedWinners.length
-                  ? 'Scenario Leaderboard'
-                  : 'Scenario Leaderboard (same as current)'
-              }
-              maxHeight="min(340px, 40vh)"
-            />
-            <BracketLeaderboard
-              userScores={baselineScores}
-              probabilityMode={false}
-              title="Official Leaderboard"
-              maxHeight="min(340px, 40vh)"
-            />
+            <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
+              <BracketLeaderboard
+                userScores={scenarioScores}
+                probabilityMode={false}
+                title="Leaderboard"
+                maxHeight="min(340px, 40vh)"
+                currentScoreByUser={currentScoreByUser}
+                scoreLabel="Scenario"
+              />
+            </Box>
             {predictedWinners.length > 0 && (
               <Paper sx={{ p: 2 }}>
                 <Typography variant="subtitle1" gutterBottom>
