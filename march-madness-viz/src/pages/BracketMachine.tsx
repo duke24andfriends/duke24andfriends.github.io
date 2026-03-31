@@ -7,13 +7,7 @@ import {
   IconButton,
   Paper,
   Stack,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow
+  Typography
 } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -38,16 +32,6 @@ import {
   GameWinner,
   UserScore
 } from '../types';
-
-type RankChangeRow = {
-  username: string;
-  bracketName: string;
-  baseRank: number;
-  scenRank: number;
-  delta: number;
-  baseScore: number;
-  scenScore: number;
-};
 
 type MobileRoundKey =
   | 'ROUND_64'
@@ -129,7 +113,6 @@ function BracketMachine() {
 
   const [predictedWinners, setPredictedWinners] = useState([] as GameWinner[]);
   const [gameProbabilities, setGameProbabilities] = useState({} as GameProbabilities);
-  const [deltaPage, setDeltaPage] = useState(1);
   const [mobileRoundIndex, setMobileRoundIndex] = useState(4);
   const [touchStartX, setTouchStartX] = useState(null as number | null);
   const [mobileSlideDirection, setMobileSlideDirection] = useState('next' as 'next' | 'prev');
@@ -226,24 +209,6 @@ function BracketMachine() {
     );
   }, [bracketData, gameWinners, predictedWinners, bracketNameByUser, fullNameByUser]);
 
-  const rankChanges = useMemo((): RankChangeRow[] => {
-    if (predictedWinners.length === 0) return [];
-    const baseRank = buildCompetitionRanks(baselineScores);
-    const scenRank = buildCompetitionRanks(scenarioScores);
-    return scenarioScores.map((u: UserScore): RankChangeRow => {
-      const br = baseRank.get(u.username) ?? 999;
-      const sr = scenRank.get(u.username) ?? 999;
-      return {
-        username: u.username,
-        bracketName: u.bracketName || u.username,
-        baseRank: br,
-        scenRank: sr,
-        delta: br - sr,
-        baseScore: baselineScores.find((b: UserScore) => b.username === u.username)?.score ?? 0,
-        scenScore: u.score
-      };
-    });
-  }, [baselineScores, scenarioScores, predictedWinners.length]);
   const currentScoreByUser = useMemo(
     () =>
       baselineScores.reduce((acc: Record<string, number>, row: UserScore) => {
@@ -252,30 +217,16 @@ function BracketMachine() {
       }, {}),
     [baselineScores]
   );
-
-  const deltaRows = useMemo(
-    () =>
-      rankChanges
-        .filter((r: RankChangeRow) => r.delta !== 0)
-        .sort((a: RankChangeRow, b: RankChangeRow) => b.delta - a.delta),
-    [rankChanges]
-  );
-  const deltaPageSize = 25;
-  const deltaTotalPages = Math.max(1, Math.ceil(deltaRows.length / deltaPageSize));
-  const deltaStart = (deltaPage - 1) * deltaPageSize;
-  const pagedDeltaRows = deltaRows.slice(deltaStart, deltaStart + deltaPageSize);
-  const deltaPagesToShow = useMemo(() => {
-    if (deltaTotalPages <= 7) {
-      return Array.from({ length: deltaTotalPages }, (_, i) => i + 1);
-    }
-    if (deltaPage <= 4) {
-      return [1, 2, 3, 4, 5, -1, deltaTotalPages];
-    }
-    if (deltaPage >= deltaTotalPages - 3) {
-      return [1, -1, deltaTotalPages - 4, deltaTotalPages - 3, deltaTotalPages - 2, deltaTotalPages - 1, deltaTotalPages];
-    }
-    return [1, -1, deltaPage - 1, deltaPage, deltaPage + 1, -1, deltaTotalPages];
-  }, [deltaPage, deltaTotalPages]);
+  const rankDeltaByUser = useMemo(() => {
+    const baseRank = buildCompetitionRanks(baselineScores);
+    const scenRank = buildCompetitionRanks(scenarioScores);
+    return scenarioScores.reduce((acc: Record<string, number>, u: UserScore) => {
+      const br = baseRank.get(u.username) ?? 999;
+      const sr = scenRank.get(u.username) ?? 999;
+      acc[u.username] = br - sr;
+      return acc;
+    }, {});
+  }, [baselineScores, scenarioScores]);
 
   const regions = getBracketRegions();
   const finalFour = regions.FINAL_FOUR;
@@ -423,7 +374,7 @@ function BracketMachine() {
   }
 
   return (
-    <Box>
+    <Box sx={{ width: '100%' }}>
       <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: 0.2 }} gutterBottom>
         Bracket Machine
       </Typography>
@@ -431,30 +382,23 @@ function BracketMachine() {
         Explore bracket outcomes by tapping winners and immediately see how standings shift.
       </Typography>
 
-      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+      <Stack spacing={2.5}>
+        <BracketLeaderboard
+          userScores={scenarioScores}
+          probabilityMode={false}
+          title="Leaderboard"
+          maxHeight={230}
+          currentScoreByUser={currentScoreByUser}
+          rankDeltaByUser={rankDeltaByUser}
+          scoreLabel="Scenario"
+        />
         <BracketControls
           resetPredictions={resetPredictions}
         />
-      </Box>
 
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={8}>
+      <Grid container spacing={{ xs: 0, md: 2.5 }} sx={{ width: '100%', mx: 0 }}>
+        <Grid item xs={12}>
           <Stack spacing={2.5}>
-            <Box sx={{ display: { xs: 'block', lg: 'none' } }}>
-              <BracketLeaderboard
-                userScores={scenarioScores}
-                probabilityMode={false}
-                title="Leaderboard"
-                maxHeight={214}
-                currentScoreByUser={currentScoreByUser}
-                scoreLabel="Scenario"
-              />
-            </Box>
-            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
-              <BracketControls
-                resetPredictions={resetPredictions}
-              />
-            </Box>
             <Box
               sx={{ display: { xs: 'block', md: 'none' } }}
               onTouchStart={(e: any) => onMobileTouchStart(e.touches[0].clientX)}
@@ -720,106 +664,8 @@ function BracketMachine() {
           </Stack>
         </Grid>
 
-        <Grid item xs={12} lg={4}>
-          <Stack spacing={2}>
-            <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
-              <BracketLeaderboard
-                userScores={scenarioScores}
-                probabilityMode={false}
-                title="Leaderboard"
-                maxHeight="min(340px, 40vh)"
-                currentScoreByUser={currentScoreByUser}
-                scoreLabel="Scenario"
-              />
-            </Box>
-            {predictedWinners.length > 0 && (
-              <Paper sx={{ p: 2 }}>
-                <Typography variant="subtitle1" gutterBottom>
-                  Biggest Movers vs Official
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block" paragraph>
-                  Ties share the same rank. Δ rank is positive when you move up.
-                </Typography>
-                <TableContainer sx={{ maxHeight: 280 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Bracket</TableCell>
-                        <TableCell align="right">Was</TableCell>
-                        <TableCell align="right">Now</TableCell>
-                        <TableCell align="right">Δ</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {pagedDeltaRows.map((r: RankChangeRow) => (
-                          <TableRow key={r.username}>
-                            <TableCell
-                              sx={{
-                                maxWidth: 140,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {r.bracketName}
-                            </TableCell>
-                            <TableCell align="right">{r.baseRank}</TableCell>
-                            <TableCell align="right">{r.scenRank}</TableCell>
-                            <TableCell align="right">{r.delta > 0 ? `+${r.delta}` : r.delta}</TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                {deltaTotalPages > 1 && (
-                  <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center" sx={{ mt: 1 }}>
-                    <IconButton
-                      size="small"
-                      onClick={() => setDeltaPage((p: number) => Math.max(1, p - 1))}
-                      disabled={deltaPage === 1}
-                    >
-                      <ChevronLeftIcon fontSize="small" />
-                    </IconButton>
-                    {deltaPagesToShow.map((p: number, idx: number) =>
-                      p === -1 ? (
-                        <Box key={`delta-ellipsis-${idx}`} sx={{ px: 0.75, color: 'text.secondary', fontSize: 14 }}>
-                          ...
-                        </Box>
-                      ) : (
-                        <Box
-                          key={`delta-page-${p}`}
-                          onClick={() => setDeltaPage(p)}
-                          sx={{
-                            px: 1.25,
-                            py: 0.25,
-                            borderRadius: 1,
-                            cursor: 'pointer',
-                            fontSize: 13,
-                            fontWeight: deltaPage === p ? 700 : 500,
-                            color: deltaPage === p ? 'primary.main' : 'text.secondary',
-                            border: '1px solid',
-                            borderColor: deltaPage === p ? 'primary.main' : 'transparent',
-                            '&:hover': { bgcolor: 'action.hover' }
-                          }}
-                        >
-                          {p}
-                        </Box>
-                      )
-                    )}
-                    <IconButton
-                      size="small"
-                      onClick={() => setDeltaPage((p: number) => Math.min(deltaTotalPages, p + 1))}
-                      disabled={deltaPage === deltaTotalPages}
-                    >
-                      <ChevronRightIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                )}
-              </Paper>
-            )}
-          </Stack>
-        </Grid>
       </Grid>
+      </Stack>
     </Box>
   );
 }

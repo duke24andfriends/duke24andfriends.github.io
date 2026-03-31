@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   IconButton,
@@ -25,6 +25,7 @@ interface BracketLeaderboardProps {
   title?: string;
   maxHeight?: string | number;
   currentScoreByUser?: Record<string, number>;
+  rankDeltaByUser?: Record<string, number>;
   scoreLabel?: string;
 }
 
@@ -39,11 +40,12 @@ function BracketLeaderboard({
   title = "Leaderboard",
   maxHeight = 'calc(100vh - 320px)',
   currentScoreByUser,
+  rankDeltaByUser,
   scoreLabel = 'Scenario'
 }: BracketLeaderboardProps) {
   const pageSize = 25;
   const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState('scenario' as 'scenario' | 'current');
+  const [sortKey, setSortKey] = useState('scenario' as 'scenario' | 'current' | 'delta');
   const [sortDirection, setSortDirection] = useState('desc' as 'asc' | 'desc');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -55,13 +57,15 @@ function BracketLeaderboard({
       const bScenario = b.score ?? 0;
       const aCurrent = currentScoreByUser?.[a.username] ?? 0;
       const bCurrent = currentScoreByUser?.[b.username] ?? 0;
-      const primaryA = sortKey === 'scenario' ? aScenario : aCurrent;
-      const primaryB = sortKey === 'scenario' ? bScenario : bCurrent;
+      const aDelta = rankDeltaByUser?.[a.username] ?? 0;
+      const bDelta = rankDeltaByUser?.[b.username] ?? 0;
+      const primaryA = sortKey === 'scenario' ? aScenario : sortKey === 'current' ? aCurrent : aDelta;
+      const primaryB = sortKey === 'scenario' ? bScenario : sortKey === 'current' ? bCurrent : bDelta;
       if (primaryA !== primaryB) return (primaryA - primaryB) * direction;
       if (aScenario !== bScenario) return (aScenario - bScenario) * direction;
       return a.username.localeCompare(b.username);
     });
-  }, [userScores, currentScoreByUser, sortKey, sortDirection]);
+  }, [userScores, currentScoreByUser, rankDeltaByUser, sortKey, sortDirection]);
   const filteredScores = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return sortedScores;
@@ -112,7 +116,7 @@ function BracketLeaderboard({
     return ranks;
   }, [sortedScores, currentScoreByUser, sortKey]);
 
-  const onSort = (nextKey: 'scenario' | 'current') => {
+  const onSort = (nextKey: 'scenario' | 'current' | 'delta') => {
     if (sortKey === nextKey) {
       setSortDirection((prev: 'asc' | 'desc') => (prev === 'desc' ? 'asc' : 'desc'));
       return;
@@ -131,7 +135,7 @@ function BracketLeaderboard({
         size="small"
         placeholder="Search by username, bracket name, or real name..."
         value={searchTerm}
-        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+        onChange={(e: any) => {
           setSearchTerm(e.target.value);
           setPage(1);
         }}
@@ -164,6 +168,15 @@ function BracketLeaderboard({
                   sx={{ px: { xs: 0.75, sm: 2 }, py: 1, cursor: 'pointer', userSelect: 'none' }}
                 >
                   Current {sortKey === 'current' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                </TableCell>
+              )}
+              {rankDeltaByUser && (
+                <TableCell
+                  align="right"
+                  onClick={() => onSort('delta')}
+                  sx={{ px: { xs: 0.75, sm: 2 }, py: 1, cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Δ Rank {sortKey === 'delta' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </TableCell>
               )}
               {probabilityMode && (
@@ -211,6 +224,13 @@ function BracketLeaderboard({
                   {currentScoreByUser && (
                     <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
                       {currentScoreByUser[user.username] ?? 0}
+                    </TableCell>
+                  )}
+                  {rankDeltaByUser && (
+                    <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
+                      {(rankDeltaByUser[user.username] ?? 0) > 0
+                        ? `+${rankDeltaByUser[user.username]}`
+                        : (rankDeltaByUser[user.username] ?? 0)}
                     </TableCell>
                   )}
                   {probabilityMode && (
