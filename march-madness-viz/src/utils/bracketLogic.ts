@@ -433,10 +433,10 @@ export const getBracketRegions = () => {
 
 // Update predicted winner and remove dependent predictions if needed
 export const updatePredictedWinner = (
-  gameId: string, 
+  gameId: string,
   winner: string,
   predictedWinners: GameWinner[],
-  getGameTeamsConsistent: (gameId: string) => string[]
+  getGameTeamsConsistent: (gameId: string, pendingPredictions: GameWinner[]) => string[]
 ): GameWinner[] => {
   // Remove existing prediction for this game
   const newPredictions = [...predictedWinners.filter(g => g.gameId !== gameId)];
@@ -456,7 +456,7 @@ export const updatePredictedWinner = (
       const predictionForGame = predictedWinners.find(p => p.gameId === depGameId);
       if (predictionForGame) {
         // Get the updated teams for this dependent game based on current predictions
-        const updatedTeams = getGameTeamsConsistent(depGameId);
+        const updatedTeams = getGameTeamsConsistent(depGameId, newPredictions);
         
         // If the teams don't include the predicted winner, remove the prediction
         if (!updatedTeams.includes(predictionForGame.winner) && !updatedTeams.includes("TBD")) {

@@ -10,6 +10,7 @@ import TeamPage from './pages/TeamPage';
 import UserPage from './pages/UserPage';
 import GamePage from './pages/GamePage';
 import PoolAnalysisPage from './pages/PoolAnalysisPage';
+import BracketMachine from './pages/BracketMachine';
 import { DEFAULT_YEAR, isSupportedYear } from './utils/yearRouting';
 
 // Custom theme
@@ -44,6 +45,7 @@ function App() {
             <Route path="users/:username" element={<UserPage />} />
             <Route path="games/:gameId" element={<GamePage />} />
             <Route path="pool-analysis" element={<PoolAnalysisPage />} />
+            <Route path="bracket-machine" element={<BracketMachine />} />
           </Route>
           <Route path="*" element={<Navigate to={`/${DEFAULT_YEAR}`} replace />} />
         </Routes>

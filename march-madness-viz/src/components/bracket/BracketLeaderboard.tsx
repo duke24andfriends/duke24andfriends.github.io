@@ -1,6 +1,4 @@
-import React from 'react';
 import {
-  Box,
   Typography,
   Table,
   TableHead,
@@ -10,10 +8,10 @@ import {
   TableContainer,
   Paper
 } from '@mui/material';
-import { UserScore, ProbabilityScore } from '../../utils/bracketLogic';
+import { UserScore } from '../../types';
 
 interface BracketLeaderboardProps {
-  userScores: UserScore[] | ProbabilityScore[];
+  userScores: Array<UserScore & { winProbability?: number }>;
   probabilityMode: boolean;
   title?: string;
   maxHeight?: string | number;
@@ -25,6 +23,8 @@ function BracketLeaderboard({
   title = "Projected Leaderboard",
   maxHeight = 'calc(100vh - 320px)'
 }: BracketLeaderboardProps) {
+  const rows = userScores.slice(0, 25);
+
   return (
     <Paper sx={{ p: 2, mb: 2, maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
       <Typography variant="h6" gutterBottom>
@@ -44,11 +44,14 @@ function BracketLeaderboard({
             </TableRow>
           </TableHead>
           <TableBody>
-            {userScores
-              .slice(0, 25)
-              .map((user, index) => (
+            {rows.map((user, index) => {
+              const tiedWithPrevious =
+                index > 0 && rows[index - 1].score === user.score;
+              const rankLabel = tiedWithPrevious ? '' : String(index + 1);
+
+              return (
                 <TableRow key={user.username}>
-                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{rankLabel}</TableCell>
                   <TableCell 
                     sx={{ 
                       maxWidth: 120, 
@@ -57,16 +60,17 @@ function BracketLeaderboard({
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {user.username}
+                    {user.bracketName || user.username}
                   </TableCell>
                   <TableCell align="right">{user.score || 0}</TableCell>
                   {probabilityMode && (
                     <TableCell align="right">
-                      {((user as ProbabilityScore).winProbability || 0).toFixed(1)}%
+                      {(user.winProbability ?? 0).toFixed(1)}%
                     </TableCell>
                   )}
                 </TableRow>
-              ))}
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>

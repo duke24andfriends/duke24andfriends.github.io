@@ -39,8 +39,12 @@ export interface TeamConfidence {
 
 export interface UserScore {
   username: string;
+  bracketName?: string;
+  fullName?: string;
   score: number;
-  actualScore: number;
+  actualScore?: number;
+  correctPicks?: number;
+  totalPicks?: number;
   roundScores?: {
     [round: string]: number;
   };

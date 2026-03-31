@@ -51,6 +51,9 @@ const Layout = ({ children, year }: { children: any; year: string }) => {
     { name: 'Teams', path: getYearPath(year, '/teams/DUKE') },
     { name: 'Pool Analysis', path: getYearPath(year, '/pool-analysis') },
     { name: 'Leaderboard', path: getYearPath(year, '/leaderboard') },
+    ...(year === '2026'
+      ? [{ name: 'Bracket machine', path: getYearPath(year, '/bracket-machine') }]
+      : []),
   ];
 
   const handleOpen = () => {
