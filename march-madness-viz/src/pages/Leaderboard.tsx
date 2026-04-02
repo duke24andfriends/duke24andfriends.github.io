@@ -105,10 +105,10 @@ function getRoundDisplayName(roundKey: string): string {
   }
 }
 
-function truncateText(value: string, maxLength: number): string {
-  if (!value) return '';
-  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
-}
+/** Mobile leaderboard: widths (px) for right-sticky Pts / Pick / More so score stays on-screen while scrolling bracket */
+const MOBILE_LB_MORE_W = 42;
+const MOBILE_LB_PICK_W = 56;
+const MOBILE_LB_STICKY_PTS_RIGHT = MOBILE_LB_MORE_W + MOBILE_LB_PICK_W;
 
 const Leaderboard = () => {
   const theme = useTheme();
@@ -616,10 +616,10 @@ const Leaderboard = () => {
         {isMobile ? (
           <Box>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, textAlign: 'right' }}>
-              Swipe left for more columns
+              Swipe for champ & bracket · Rank & points stay visible
             </Typography>
             <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto', mx: -1 }}>
-              <Table aria-label="mobile leaderboard table" size="small" sx={{ minWidth: 468 }}>
+              <Table aria-label="mobile leaderboard table" size="small" sx={{ minWidth: 540 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell
@@ -639,15 +639,58 @@ const Leaderboard = () => {
                       Champ
                     </TableCell>
                     <TableCell
-                      sx={{ minWidth: 86, px: 0.125, pr: 0 }}
+                      sx={{ minWidth: 156, maxWidth: 180, px: 0.125, pr: 0 }}
                     >
                       Bracket
                     </TableCell>
-                    <TableCell align="right" sx={{ minWidth: 34, px: 0, pl: 0, cursor: 'pointer' }} onClick={() => handleSort('score')}>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        minWidth: 38,
+                        px: 0,
+                        pl: 0,
+                        cursor: 'pointer',
+                        position: 'sticky',
+                        right: MOBILE_LB_STICKY_PTS_RIGHT,
+                        zIndex: 4,
+                        backgroundColor: 'background.paper',
+                        boxShadow: (theme) =>
+                          `-10px 0 14px -6px ${
+                            theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.12)'
+                          }`
+                      }}
+                      onClick={() => handleSort('score')}
+                    >
                       Pts {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
                     </TableCell>
-                    <TableCell align="right" sx={{ minWidth: 36, px: 0.25 }}>Pick</TableCell>
-                    <TableCell align="right" sx={{ minWidth: 34, px: 0.25 }}>More</TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        minWidth: MOBILE_LB_PICK_W,
+                        width: MOBILE_LB_PICK_W,
+                        px: 0.25,
+                        position: 'sticky',
+                        right: MOBILE_LB_MORE_W,
+                        zIndex: 4,
+                        backgroundColor: 'background.paper'
+                      }}
+                    >
+                      Pick
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        minWidth: MOBILE_LB_MORE_W,
+                        width: MOBILE_LB_MORE_W,
+                        px: 0.25,
+                        position: 'sticky',
+                        right: 0,
+                        zIndex: 4,
+                        backgroundColor: 'background.paper'
+                      }}
+                    >
+                      More
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -655,15 +698,15 @@ const Leaderboard = () => {
                     const isExpanded = expandedUsers.includes(user.username);
                     const rank = getRank(index, sortedUsers);
                     const recentPerformance = getRecentPerformance.get(user.username) || 0;
+                    const rowSelected = selectedUsers.includes(user.username);
+                    const mobileStickyBg = rowSelected ? 'rgba(25, 118, 210, 0.08)' : 'background.paper';
 
                     return (
                       <React.Fragment key={user.username}>
                         <TableRow
                           hover
                           sx={{
-                            backgroundColor: selectedUsers.includes(user.username)
-                              ? 'rgba(25, 118, 210, 0.08)'
-                              : 'inherit'
+                            backgroundColor: rowSelected ? 'rgba(25, 118, 210, 0.08)' : 'inherit'
                           }}
                         >
                           <TableCell
@@ -695,23 +738,84 @@ const Leaderboard = () => {
                               </Button>
                             ) : '-'}
                           </TableCell>
-                          <TableCell sx={{ px: 0.125, pr: 0 }}>
-                            <Typography variant="body2" noWrap sx={{ maxWidth: 84 }}>
-                              {truncateText(user.bracketName || user.username, 11)}
+                          <TableCell
+                            sx={{
+                              px: 0.125,
+                              pr: 0,
+                              minWidth: 156,
+                              maxWidth: 180,
+                              verticalAlign: 'middle'
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              noWrap
+                              sx={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '100%'
+                              }}
+                            >
+                              {user.bracketName || user.username}
                             </Typography>
                             <Button
                               component={RouterLink}
                               to={yearPath(`/users/${user.username}`)}
                               size="small"
-                              sx={{ textTransform: 'none', px: 0, py: 0, minWidth: 0, maxWidth: 84, justifyContent: 'flex-start' }}
+                              sx={{
+                                textTransform: 'none',
+                                px: 0,
+                                py: 0,
+                                minWidth: 0,
+                                maxWidth: '100%',
+                                justifyContent: 'flex-start',
+                                display: 'block'
+                              }}
                             >
-                              <Typography variant="caption" noWrap sx={{ maxWidth: 84 }}>
-                                @{truncateText(user.username, 8)}
+                              <Typography
+                                variant="caption"
+                                noWrap
+                                sx={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '100%',
+                                  display: 'block',
+                                  textAlign: 'left'
+                                }}
+                              >
+                                @{user.username}
                               </Typography>
                             </Button>
                           </TableCell>
-                          <TableCell align="right" sx={{ px: 0, pl: 0 }}>{user.score}</TableCell>
-                          <TableCell align="right" sx={{ px: 0.25 }}>
+                          <TableCell
+                            align="right"
+                            sx={{
+                              px: 0,
+                              pl: 0,
+                              position: 'sticky',
+                              right: MOBILE_LB_STICKY_PTS_RIGHT,
+                              zIndex: 2,
+                              backgroundColor: mobileStickyBg,
+                              boxShadow: (theme) =>
+                                `-10px 0 14px -6px ${
+                                  theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.12)'
+                                }`
+                            }}
+                          >
+                            {user.score}
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            sx={{
+                              px: 0.25,
+                              position: 'sticky',
+                              right: MOBILE_LB_MORE_W,
+                              zIndex: 2,
+                              backgroundColor: mobileStickyBg,
+                              minWidth: MOBILE_LB_PICK_W,
+                              width: MOBILE_LB_PICK_W
+                            }}
+                          >
                             <Switch
                               size="small"
                               checked={selectedUsers.includes(user.username)}
@@ -719,7 +823,18 @@ const Leaderboard = () => {
                               color="primary"
                             />
                           </TableCell>
-                          <TableCell align="right" sx={{ px: 0.25 }}>
+                          <TableCell
+                            align="right"
+                            sx={{
+                              px: 0.25,
+                              position: 'sticky',
+                              right: 0,
+                              zIndex: 2,
+                              backgroundColor: mobileStickyBg,
+                              minWidth: MOBILE_LB_MORE_W,
+                              width: MOBILE_LB_MORE_W
+                            }}
+                          >
                             <IconButton
                               size="small"
                               onClick={() => toggleUserExpanded(user.username)}
