@@ -18,7 +18,7 @@ import { getMostRecentRound } from '../utils/mostRecentRound';
 
 const Home = () => {
   const { loading, error, bracketData, gameResults } = useData();
-  const { yearPath } = useYearPath();
+  const { yearPath, activeYear } = useYearPath();
   const mostRecentRound = useMemo(() => getMostRecentRound(gameResults), [gameResults]);
 
   if (loading) {
@@ -146,7 +146,7 @@ const Home = () => {
             <CardActions>
               <Button 
                 component={RouterLink} 
-                  to={yearPath('/leaderboard')}
+                to={yearPath('/leaderboard')}
                 variant="contained" 
                 color="primary"
               >
@@ -155,6 +155,29 @@ const Home = () => {
             </CardActions>
           </Card>
         </Grid>
+
+        {activeYear === '2026' && (
+          <Grid item xs={12} md={6} lg={4}>
+            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardHeader title="Bracket Machine" />
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Typography variant="body1">
+                  Walk the bracket round by round, set hypothetical winners, and see how pool scores and standings would shift.
+                </Typography>
+              </CardContent>
+              <CardActions>
+                <Button
+                  component={RouterLink}
+                  to={yearPath('/bracket-machine')}
+                  variant="contained"
+                  color="primary"
+                >
+                  View Bracket Machine
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
+        )}
       </Grid>
     </Stack>
   );
