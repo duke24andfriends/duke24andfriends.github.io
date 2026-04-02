@@ -786,7 +786,7 @@ const Leaderboard = () => {
                   <TableCell>Rank</TableCell>
                   <TableCell>Username</TableCell>
                   <TableCell>Bracket Name</TableCell>
-                  <TableCell>Full Name</TableCell>
+                  <TableCell>Name</TableCell>
                   <TableCell 
                     align="right" 
                     sx={{ cursor: 'pointer' }}

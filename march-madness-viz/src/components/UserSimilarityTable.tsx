@@ -103,7 +103,6 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
               <TableCell sx={{ ...compactCellSx, width: { xs: '32%', sm: 'auto' } }}>Name</TableCell>
               <TableCell sx={hideOnMobileSx}>Username</TableCell>
               <TableCell sx={hideOnMobileSx}>Bracket Name</TableCell>
-              <TableCell sx={hideOnMobileSx}>Full Name</TableCell>
               <TableCell 
                 align="right" 
                 onClick={() => requestSort('similarity')}
@@ -198,19 +197,10 @@ const UserSimilarityTable: React.FC<UserSimilarityTableProps> = ({
                       </Link>
                     </Tooltip>
                   </TableCell>
-                  <TableCell sx={hideOnMobileSx}>
-                    <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                      @{user.username}
-                    </Link>
-                  </TableCell>
+                  <TableCell sx={hideOnMobileSx}>@{user.username}</TableCell>
                   <TableCell sx={hideOnMobileSx}>
                     <Tooltip title={userMapping.bracketName} arrow placement="top">
                       <span>{userMapping.bracketName}</span>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell sx={hideOnMobileSx}>
-                    <Tooltip title={userMapping.fullName} arrow placement="top">
-                      <span>{userMapping.fullName}</span>
                     </Tooltip>
                   </TableCell>
                   <TableCell align="right" sx={compactMetricCellSx}>{(user.similarity * 100).toFixed(1)}%</TableCell>

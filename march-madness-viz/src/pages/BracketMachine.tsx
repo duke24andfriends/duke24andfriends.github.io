@@ -391,6 +391,8 @@ function BracketMachine() {
           currentScoreByUser={currentScoreByUser}
           rankDeltaByUser={rankDeltaByUser}
           scoreLabel="Scenario"
+          showCurrentColumn={false}
+          showDeltaColumn={false}
         />
         <BracketControls
           resetPredictions={resetPredictions}

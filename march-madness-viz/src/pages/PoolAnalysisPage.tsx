@@ -7,11 +7,6 @@ import {
   CardContent,
   Grid,
   CircularProgress,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
   Tabs,
   Tab,
   Button,
@@ -22,7 +17,6 @@ import {
   Slider,
   Stack,
   Paper,
-  Link,
   Tooltip,
   Divider,
   Autocomplete,
@@ -31,9 +25,8 @@ import {
   AccordionDetails
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { useYearPath } from '../utils/yearRouting';
 import { Scatter } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -44,6 +37,9 @@ import {
   Legend
 } from 'chart.js';
 import UserSimilarityTable, { UserSimilarity } from '../components/UserSimilarityTable';
+import PickStrategyTable, {
+  PickStrategyTableRow
+} from '../components/pool/PickStrategyTable';
 
 // Register Chart.js components
 ChartJS.register(
@@ -105,7 +101,6 @@ const PoolAnalysisPage = () => {
   } = useData();
   
   const location = useLocation();
-  const { yearPath } = useYearPath();
   const [tabValue, setTabValue] = useState(0);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [clusterCount, setClusterCount] = useState<number>(3);
@@ -399,6 +394,21 @@ const PoolAnalysisPage = () => {
       };
     });
   }, [bracketData, gameResults, userScores]);
+
+  const pickStrategyTableRows: PickStrategyTableRow[] = useMemo(() => {
+    return userPickStrategies.map((u) => {
+      const meta = userScores.find((s) => s.username === u.username);
+      return {
+        username: u.username,
+        chalkScore: u.chalkScore,
+        herdingScore: u.herdingScore,
+        deviationScore: u.deviationScore,
+        score: u.score,
+        fullName: meta?.fullName,
+        bracketName: meta?.bracketName
+      };
+    });
+  }, [userPickStrategies, userScores]);
   
   // Perform k-means clustering on user picks for championship game (game 63)
   const userClusters = useMemo(() => {
@@ -684,107 +694,27 @@ const PoolAnalysisPage = () => {
           </Grid>
           
           <Grid item xs={12} md={8} sx={{ order: { xs: 2, md: 2 } }}>
-            <Card sx={{ mb: 3 }}>
-              <CardHeader title="Most Chalky Brackets (Picked by Seed)" />
-              <CardContent>
-                <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Higher chalk score means more picks of lower-seeded favorites.
-                </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell align="right">Chalk Score</TableCell>
-                      <TableCell align="right">Score</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {userPickStrategies
-                      .sort((a, b) => b.chalkScore - a.chalkScore)
-                      .slice(0, 10)
-                      .map(user => (
-                        <TableRow key={user.username}>
-                          <TableCell>
-                            <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                              {getDisplayName(user.username)}
-                            </Link>
-                          </TableCell>
-                          <TableCell align="right">{user.chalkScore.toFixed(1)}%</TableCell>
-                          <TableCell align="right">{user.score}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            
-            <Card sx={{ mb: 3 }}>
-              <CardHeader title="Most Popular Opinion Followers (Herding)" />
-              <CardContent>
-                <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Higher herding score means more picks aligned with the pool majority.
-                </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell align="right">Herding Score</TableCell>
-                      <TableCell align="right">Score</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {userPickStrategies
-                      .sort((a, b) => b.herdingScore - a.herdingScore)
-                      .slice(0, 10)
-                      .map(user => (
-                        <TableRow key={user.username}>
-                          <TableCell>
-                            <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                              {getDisplayName(user.username)}
-                            </Link>
-                          </TableCell>
-                          <TableCell align="right">{user.herdingScore.toFixed(1)}%</TableCell>
-                          <TableCell align="right">{user.score}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader title="Most Contrarian Brackets" />
-              <CardContent>
-                <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Higher deviation score means more divergence from consensus picks.
-                </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell align="right">Deviation Score</TableCell>
-                      <TableCell align="right">Score</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {userPickStrategies
-                      .sort((a, b) => b.deviationScore - a.deviationScore)
-                      .slice(0, 10)
-                      .map(user => (
-                        <TableRow key={user.username}>
-                          <TableCell>
-                            <Link component={RouterLink} to={yearPath(`/users/${user.username}`)}>
-                              {getDisplayName(user.username)}
-                            </Link>
-                          </TableCell>
-                          <TableCell align="right">{user.deviationScore.toFixed(1)}</TableCell>
-                          <TableCell align="right">{user.score}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <PickStrategyTable
+              title="Most Chalky Brackets (Picked by Seed)"
+              description="Higher chalk score means more picks of lower-seeded favorites."
+              rows={pickStrategyTableRows}
+              defaultSortKey="chalkScore"
+              columns={['chalkScore']}
+            />
+            <PickStrategyTable
+              title="Most Popular Opinion Followers (Herding)"
+              description="Higher herding score means more picks aligned with the pool majority."
+              rows={pickStrategyTableRows}
+              defaultSortKey="herdingScore"
+              columns={['herdingScore']}
+            />
+            <PickStrategyTable
+              title="Most Contrarian Brackets"
+              description="Higher deviation score means more divergence from consensus picks."
+              rows={pickStrategyTableRows}
+              defaultSortKey="deviationScore"
+              columns={['deviationScore']}
+            />
           </Grid>
         </Grid>
       </TabPanel>

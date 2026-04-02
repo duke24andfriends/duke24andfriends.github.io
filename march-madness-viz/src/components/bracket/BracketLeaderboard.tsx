@@ -27,6 +27,10 @@ interface BracketLeaderboardProps {
   currentScoreByUser?: Record<string, number>;
   rankDeltaByUser?: Record<string, number>;
   scoreLabel?: string;
+  /** When false, hide Current column even if `currentScoreByUser` is provided */
+  showCurrentColumn?: boolean;
+  /** When false, hide Δ Rank column even if `rankDeltaByUser` is provided */
+  showDeltaColumn?: boolean;
 }
 
 function truncateName(value: string, maxLength: number): string {
@@ -41,13 +45,27 @@ function BracketLeaderboard({
   maxHeight = 'calc(100vh - 320px)',
   currentScoreByUser,
   rankDeltaByUser,
-  scoreLabel = 'Scenario'
+  scoreLabel = 'Scenario',
+  showCurrentColumn = true,
+  showDeltaColumn = true
 }: BracketLeaderboardProps) {
   const pageSize = 25;
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState('scenario' as 'scenario' | 'current' | 'delta');
   const [sortDirection, setSortDirection] = useState('desc' as 'asc' | 'desc');
   const [searchTerm, setSearchTerm] = useState('');
+
+  const currentVisible = Boolean(currentScoreByUser && showCurrentColumn);
+  const deltaVisible = Boolean(rankDeltaByUser && showDeltaColumn);
+
+  useEffect(() => {
+    if (sortKey === 'current' && !currentVisible) {
+      setSortKey('scenario');
+    }
+    if (sortKey === 'delta' && !deltaVisible) {
+      setSortKey('scenario');
+    }
+  }, [sortKey, currentVisible, deltaVisible]);
 
   const start = (page - 1) * pageSize;
   const sortedScores = useMemo(() => {
@@ -161,7 +179,7 @@ function BracketLeaderboard({
               >
                 {scoreLabel} {sortKey === 'scenario' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
               </TableCell>
-              {currentScoreByUser && (
+              {currentVisible && (
                 <TableCell
                   align="right"
                   onClick={() => onSort('current')}
@@ -170,7 +188,7 @@ function BracketLeaderboard({
                   Current {sortKey === 'current' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </TableCell>
               )}
-              {rankDeltaByUser && (
+              {deltaVisible && (
                 <TableCell
                   align="right"
                   onClick={() => onSort('delta')}
@@ -221,16 +239,16 @@ function BracketLeaderboard({
                   <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
                     {user.score || 0}
                   </TableCell>
-                  {currentScoreByUser && (
+                  {currentVisible && (
                     <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
-                      {currentScoreByUser[user.username] ?? 0}
+                      {currentScoreByUser?.[user.username] ?? 0}
                     </TableCell>
                   )}
-                  {rankDeltaByUser && (
+                  {deltaVisible && (
                     <TableCell align="right" sx={{ px: { xs: 0.75, sm: 2 }, py: 0.85, fontSize: { xs: '0.94rem', sm: '1rem' } }}>
-                      {(rankDeltaByUser[user.username] ?? 0) > 0
-                        ? `+${rankDeltaByUser[user.username]}`
-                        : (rankDeltaByUser[user.username] ?? 0)}
+                      {(rankDeltaByUser?.[user.username] ?? 0) > 0
+                        ? `+${rankDeltaByUser?.[user.username]}`
+                        : (rankDeltaByUser?.[user.username] ?? 0)}
                     </TableCell>
                   )}
                   {probabilityMode && (
