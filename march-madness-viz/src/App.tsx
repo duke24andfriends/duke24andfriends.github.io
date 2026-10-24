@@ -1,4 +1,4 @@
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom';
 import { DataProvider } from './context/DataContext';
@@ -12,23 +12,7 @@ import GamePage from './pages/GamePage';
 import PoolAnalysisPage from './pages/PoolAnalysisPage';
 import BracketMachine from './pages/BracketMachine';
 import { DEFAULT_YEAR, isSupportedYear } from './utils/yearRouting';
-
-// Custom theme
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#0099ff',
-      light: '#b3e0ff',
-      dark: '#005999',
-    },
-    secondary: {
-      main: '#f50057',
-    },
-  },
-  typography: {
-    fontFamily: 'Roboto, sans-serif',
-  },
-});
+import theme from './theme';
 
 function App() {
   return (
