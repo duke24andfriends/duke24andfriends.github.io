@@ -342,17 +342,35 @@ function BracketMachine() {
         </Box>
 
         <Box
+          sx={{
+            position: 'relative',
+            mb: 3,
+            maxWidth: 820,
+            '&::after': {
+              content: '""',
+              display: { xs: 'block', md: 'none' },
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 32,
+              borderRadius: '0 12px 12px 0',
+              pointerEvents: 'none',
+              background: `linear-gradient(to right, rgba(246, 247, 249, 0), ${tokens.surfaceAlt})`,
+            },
+          }}
+        >
+        <Box
           role="tablist"
           sx={{
             display: 'flex',
             p: 0.5,
+            pr: { xs: 3, md: 0.5 },
             bgcolor: tokens.surfaceAlt,
             borderRadius: 3,
             overflowX: 'auto',
             scrollbarWidth: 'none',
             '&::-webkit-scrollbar': { display: 'none' },
-            mb: 3,
-            maxWidth: 820,
           }}
         >
           {TABS.map((t) => {
@@ -362,8 +380,12 @@ function BracketMachine() {
                 key={t.key}
                 role="tab"
                 aria-selected={active}
-                onClick={() => setTab(t.key)}
+                onClick={(e) => {
+                  setTab(t.key);
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }}
                 sx={{
+                  order: t.key === 'FULL' ? { xs: 1, md: 0 } : 0,
                   flex: '1 0 auto',
                   px: { xs: 1.25, sm: 2 },
                   py: 1.1,
@@ -379,6 +401,7 @@ function BracketMachine() {
               </ButtonBase>
             );
           })}
+        </Box>
         </Box>
 
         <Typography component="h2" sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 800, letterSpacing: '-0.02em' }}>
@@ -401,7 +424,14 @@ function BracketMachine() {
             {...bracketProps}
           />
         ) : (
-          <RegionBracket columns={columns} championGameId={tab === 'FINAL_FOUR' ? '63' : undefined} {...bracketProps} />
+          <>
+            {tab !== 'FINAL_FOUR' && (
+              <Typography sx={{ display: { xs: 'block', sm: 'none' }, fontSize: '0.8rem', color: tokens.muted, mt: -2, mb: 1.5 }}>
+                Swipe sideways for later rounds →
+              </Typography>
+            )}
+            <RegionBracket columns={columns} championGameId={tab === 'FINAL_FOUR' ? '63' : undefined} {...bracketProps} />
+          </>
         )}
 
         <Box sx={{ display: 'flex', gap: 2.5, mt: 2, color: tokens.muted, fontSize: '0.8rem', flexWrap: 'wrap' }}>
@@ -417,7 +447,7 @@ function BracketMachine() {
         </Box>
 
         {/* Leaves room for the fixed scenario bar on mobile */}
-        <Box sx={{ display: { xs: 'block', lg: 'none' }, height: 120 }} />
+        <Box sx={{ display: { xs: 'block', lg: 'none' }, height: 72 }} />
       </Box>
 
       {/* Desktop sidebar */}
@@ -440,33 +470,36 @@ function BracketMachine() {
       </Box>
 
       {/* Mobile scenario bar */}
-      <Box
+      <ButtonBase
+        onClick={() => setStandingsOpen(true)}
         sx={{
-          display: { xs: 'block', lg: 'none' },
+          display: { xs: 'flex', lg: 'none' },
+          alignItems: 'center',
+          gap: 1.5,
           position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: { xs: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom))`, md: 0 },
+          left: 12,
+          right: 12,
+          bottom: { xs: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom) + 8px)`, md: 16 },
           zIndex: (t) => t.zIndex.appBar - 1,
-          bgcolor: tokens.surface,
-          borderTop: `1px solid ${tokens.border}`,
-          boxShadow: '0 -8px 24px rgba(15, 23, 42, 0.08)',
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          px: 2.5,
-          pt: 1,
-          pb: 1.75,
+          bgcolor: tokens.ink,
+          color: '#fff',
+          borderRadius: 3,
+          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.18)',
+          px: 2,
+          py: 1.25,
+          textAlign: 'left',
         }}
       >
-        <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: tokens.border, mx: 'auto', mb: 1.25 }} />
-        <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 0.75 }}>Your scenario</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>{summary}</Box>
-          <Button variant="contained" size="large" onClick={() => setStandingsOpen(true)} sx={{ whiteSpace: 'nowrap', px: 2.5, py: 1.4 }}>
-            Standings →
-          </Button>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+            {picksMade} {picksMade === 1 ? 'pick' : 'picks'}
+            <Box component="span" sx={{ opacity: 0.6, mx: 0.75 }}>·</Box>
+            {picksMade ? 'Projected leader' : 'Leader'}: {leader?.fullName ?? '—'}
+            {tiedLeaders > 1 ? ` +${tiedLeaders - 1}` : ''}
+          </Typography>
         </Box>
-      </Box>
+        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#9cc0f5', whiteSpace: 'nowrap' }}>View standings ↑</Typography>
+      </ButtonBase>
 
       <Drawer
         anchor="bottom"
@@ -475,6 +508,7 @@ function BracketMachine() {
         PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '85vh', px: 2, pb: 'calc(16px + env(safe-area-inset-bottom))' } }}
       >
         <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: tokens.border, mx: 'auto', mt: 1.25, mb: 2 }} />
+        <Box sx={{ pb: 2, mb: 2, borderBottom: `1px solid ${tokens.border}` }}>{summary}</Box>
         <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', mb: 1.5 }}>Scenario standings</Typography>
         <ScenarioStandings rows={rows} hasPicks={picksMade > 0} />
       </Drawer>

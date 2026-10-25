@@ -346,7 +346,38 @@ const UserPage = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <Box>
             <SectionHeading>Similar brackets</SectionHeading>
-            <TableContainer sx={{ border: `1px solid ${tokens.border}`, borderRadius: 2.5 }}>
+            <Box sx={{ display: { xs: 'block', md: 'none' }, borderTop: `1px solid ${tokens.border}` }}>
+              {similarRows.map((s) => (
+                <ButtonBase
+                  key={s.username}
+                  disabled={s.self}
+                  onClick={() => navigate(yearPath(`/users/${encodeURIComponent(s.username)}`))}
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '44px minmax(0, 1fr) auto',
+                    alignItems: 'center',
+                    columnGap: 1,
+                    width: '100%',
+                    textAlign: 'left',
+                    py: 1.25,
+                    px: s.self ? 1 : 0,
+                    borderRadius: s.self ? 1.5 : 0,
+                    bgcolor: s.self ? tokens.primarySoft : undefined,
+                    borderBottom: `1px solid ${tokens.divider}`,
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.85rem', color: tokens.body }}>#{s.standing?.rank ?? '–'}</Typography>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontSize: '0.9rem', fontWeight: s.self ? 700 : 600, color: tokens.primary }}>
+                      {s.self ? `${me.fullName} (this bracket)` : s.standing?.fullName ?? s.username}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: tokens.muted }}>{fmt(s.standing?.score ?? 0)} pts</Typography>
+                  </Box>
+                  <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{s.self ? '—' : `${Math.round(s.similarity * 100)}%`}</Typography>
+                </ButtonBase>
+              ))}
+            </Box>
+            <TableContainer sx={{ display: { xs: 'none', md: 'block' }, border: `1px solid ${tokens.border}`, borderRadius: 2.5 }}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ '& th': { bgcolor: tokens.surfaceAlt } }}>
@@ -443,7 +474,47 @@ const UserPage = () => {
           >
             All picks
           </SectionHeading>
-          <TableContainer sx={{ border: `1px solid ${tokens.border}`, borderRadius: 2.5, maxHeight: 640 }}>
+          <Box sx={{ display: { xs: 'block', md: 'none' }, borderTop: `1px solid ${tokens.border}` }}>
+            {shownPicks.map((p, i) => {
+              const roundBreak = i > 0 && shownPicks[i - 1].round !== p.round;
+              return (
+                <ButtonBase
+                  key={p.gameId}
+                  onClick={() => navigate(yearPath(`/games/${p.gameId}`))}
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '44px minmax(0, 1fr) auto',
+                    alignItems: 'center',
+                    columnGap: 1,
+                    width: '100%',
+                    textAlign: 'left',
+                    py: 1.1,
+                    borderBottom: `1px solid ${tokens.divider}`,
+                    borderTop: roundBreak ? `6px solid ${tokens.surfaceAlt}` : undefined,
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.75rem', color: tokens.muted }}>{ROUND_LABELS[p.round].short}</Typography>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontSize: '0.9rem', fontWeight: 600, color: p.dead ? tokens.subtle : tokens.ink, textDecoration: p.dead ? 'line-through' : 'none' }}>
+                      {seedByTeam[p.pick] ? `(${seedByTeam[p.pick]}) ` : ''}
+                      {p.pick}
+                    </Typography>
+                    <Typography noWrap sx={{ fontSize: '0.75rem', color: tokens.muted }}>
+                      {p.matchup} · {p.completed ? `${p.winner} won` : p.dead ? 'pick eliminated' : 'pending'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: p.points ? 700 : 400, color: p.points ? tokens.ink : tokens.muted }}>
+                      {p.completed ? `+${p.points}` : '–'}
+                    </Typography>
+                    {p.completed &&
+                      (p.correct ? <CheckCircleIcon sx={{ fontSize: 18, color: tokens.success }} /> : <CancelIcon sx={{ fontSize: 18, color: tokens.down }} />)}
+                  </Box>
+                </ButtonBase>
+              );
+            })}
+          </Box>
+          <TableContainer sx={{ display: { xs: 'none', md: 'block' }, border: `1px solid ${tokens.border}`, borderRadius: 2.5, maxHeight: 640 }}>
             <Table size="small" stickyHeader sx={{ minWidth: 560 }}>
               <TableHead>
                 <TableRow sx={{ '& th': { bgcolor: tokens.surfaceAlt } }}>

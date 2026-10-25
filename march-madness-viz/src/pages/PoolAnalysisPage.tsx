@@ -163,6 +163,31 @@ const RowChevron = () => (
 
 const clickableRowSx = { cursor: 'pointer', '&:hover .row-chevron': { color: tokens.primary } } as const;
 
+/* Tables on desktop, flat rows on phones so no value sits off-screen. */
+const desktopOnly = { display: { xs: 'none', md: 'block' } } as const;
+const mobileOnly = { display: { xs: 'block', md: 'none' } } as const;
+const resultsPanelSx = {
+  border: { md: `1px solid ${tokens.border}` },
+  borderRadius: { md: 3 },
+  overflow: 'hidden',
+  minWidth: 0,
+} as const;
+
+const MobileRow = ({ position, s, value, detail, onClick }: { position: number; s?: Standing; value: string; detail?: string; onClick: () => void }) => (
+  <ButtonBase
+    onClick={onClick}
+    sx={{ display: 'grid', gridTemplateColumns: '28px 32px minmax(0, 1fr) auto', alignItems: 'center', columnGap: 1.25, width: '100%', textAlign: 'left', py: 1.25, borderBottom: `1px solid ${tokens.divider}` }}
+  >
+    <Typography sx={{ fontSize: '0.875rem', color: tokens.body, textAlign: 'center' }}>{position}</Typography>
+    <InitialsAvatar name={s?.fullName ?? '?'} seed={s?.username} size={32} />
+    <Box sx={{ minWidth: 0 }}>
+      <Typography noWrap sx={{ fontSize: '0.9rem', fontWeight: 600 }}>{s?.fullName}</Typography>
+      <Typography noWrap sx={{ fontSize: '0.75rem', color: tokens.muted }}>{detail ?? s?.bracketName}</Typography>
+    </Box>
+    <Box sx={{ px: 1, py: 0.4, borderRadius: 1.5, bgcolor: tokens.primarySoft, color: tokens.primaryDark, fontWeight: 700, fontSize: '0.85rem' }}>{value}</Box>
+  </ButtonBase>
+);
+
 const PoolAnalysisPage = () => {
   const { bracketData, gameResults, loading, error } = useData();
   const { standings } = usePoolStandings(1);
@@ -346,8 +371,8 @@ const PoolAnalysisPage = () => {
             </Box>
 
             {/* Ranking table */}
-            <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, overflow: 'hidden', minWidth: 0 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, px: 2.5, py: 2 }}>
+            <Box sx={resultsPanelSx}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: { xs: 1.5, md: 2 }, px: { xs: 0, md: 2.5 }, py: 2 }}>
                 <Typography component="h2" sx={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{def.tableTitle}</Typography>
                 <TextField
                   size="small"
@@ -361,7 +386,20 @@ const PoolAnalysisPage = () => {
                   InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: tokens.muted }} /></InputAdornment> }}
                 />
               </Box>
-              <TableContainer sx={{ maxHeight: 720 }}>
+              <Box sx={{ ...mobileOnly, borderTop: `1px solid ${tokens.border}` }}>
+                {strategyRows.slice(0, strategyLimit).map((r) => (
+                  <MobileRow
+                    key={r.username}
+                    position={r.position}
+                    s={r.standing}
+                    value={def.format(r.value)}
+                    detail={`${r.standing?.bracketName ?? ''} · #${r.standing?.rank ?? '–'} in pool`}
+                    onClick={() => openProfile(r.username)}
+                  />
+                ))}
+                {strategyRows.length === 0 && <Typography sx={{ py: 4, textAlign: 'center', color: tokens.muted }}>No brackets match “{strategySearch}”.</Typography>}
+              </Box>
+              <TableContainer sx={{ ...desktopOnly, maxHeight: 720 }}>
                 <Table size="small" stickyHeader sx={{ '& td': { py: 1.1 } }}>
                   <TableHead>
                     <TableRow sx={{ '& th': headCellSx }}>
@@ -403,7 +441,7 @@ const PoolAnalysisPage = () => {
                 </Table>
               </TableContainer>
               {strategyRows.length > strategyLimit && (
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, borderTop: `1px solid ${tokens.border}` }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 0, md: 2.5 }, py: 1.5, borderTop: { md: `1px solid ${tokens.border}` } }}>
                   <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
                     Showing {fmt(strategyLimit)} of {fmt(strategyRows.length)}
                   </Typography>
@@ -414,7 +452,7 @@ const PoolAnalysisPage = () => {
           </Box>
 
           {/* Cross-links to the other two metrics */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mt: 3 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 0, md: 2 }, mt: 3, borderTop: { xs: `1px solid ${tokens.border}`, md: 'none' } }}>
             {otherMetrics.map((m) => (
               <ButtonBase
                 key={m}
@@ -428,23 +466,24 @@ const PoolAnalysisPage = () => {
                   alignItems: 'center',
                   gap: 2,
                   textAlign: 'left',
-                  border: `1px solid ${tokens.border}`,
-                  borderRadius: 3,
-                  px: 2.5,
-                  py: 2,
+                  border: { md: `1px solid ${tokens.border}` },
+                  borderBottom: { xs: `1px solid ${tokens.border}` },
+                  borderRadius: { md: 3 },
+                  px: { xs: 0, md: 2.5 },
+                  py: { xs: 1.5, md: 2 },
                   transition: 'border-color 150ms',
-                  '&:hover': { borderColor: tokens.primary },
+                  '&:hover': { borderColor: { md: tokens.primary } },
                 }}
               >
                 <Box>
-                  <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>{METRICS[m].linkTitle}</Typography>
-                  <Typography sx={{ fontSize: '0.825rem', color: tokens.muted }}>{METRICS[m].linkBody}</Typography>
+                  <Typography sx={{ fontWeight: { xs: 600, md: 700 }, fontSize: { xs: '0.95rem', md: '1rem' } }}>{METRICS[m].linkTitle}</Typography>
+                  <Typography sx={{ display: { xs: 'none', md: 'block' }, fontSize: '0.825rem', color: tokens.muted }}>{METRICS[m].linkBody}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
-                  <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.primarySoft, display: { xs: 'none', sm: 'grid' }, placeItems: 'center' }}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.primarySoft, display: { xs: 'none', md: 'grid' }, placeItems: 'center' }}>
                     <GroupsOutlinedIcon sx={{ fontSize: 22, color: tokens.primary }} />
                   </Box>
-                  <Typography sx={{ fontSize: '0.825rem', color: tokens.primary, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <Typography sx={{ display: { xs: 'none', md: 'block' }, fontSize: '0.825rem', color: tokens.primary, fontWeight: 600, whiteSpace: 'nowrap' }}>
                     View {METRICS[m].label.toLowerCase()} rankings
                   </Typography>
                   <ChevronRightIcon sx={{ color: tokens.primary }} />
@@ -506,8 +545,8 @@ const PoolAnalysisPage = () => {
             </Box>
           </Box>
 
-          <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, overflow: 'hidden', minWidth: 0 }}>
-            <Box sx={{ px: 2.5, py: 2 }}>
+          <Box sx={resultsPanelSx}>
+            <Box sx={{ px: { xs: 0, md: 2.5 }, py: 2 }}>
               <Typography component="h2" sx={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.01em' }}>
                 {selected ? `Brackets most similar to ${selected.fullName}` : 'Similar brackets'}
               </Typography>
@@ -516,7 +555,19 @@ const PoolAnalysisPage = () => {
               <Typography sx={{ px: 2.5, pb: 4, color: tokens.muted }}>Pick a bracket on the left to see who picked most like it.</Typography>
             ) : (
               <>
-                <TableContainer sx={{ maxHeight: 720 }}>
+                <Box sx={{ ...mobileOnly, borderTop: `1px solid ${tokens.border}` }}>
+                  {sortedSimilarities.slice(0, simLimit).map((r, i) => (
+                    <MobileRow
+                      key={r.username}
+                      position={i + 1}
+                      s={r.standing}
+                      value={`${(r.weighted * 100).toFixed(1)}%`}
+                      detail={`Regular ${(r.regular * 100).toFixed(0)}% · ${fmt(r.shared)} shared pts · ${fmt(r.score)} score`}
+                      onClick={() => openProfile(r.username)}
+                    />
+                  ))}
+                </Box>
+                <TableContainer sx={{ ...desktopOnly, maxHeight: 720 }}>
                   <Table size="small" stickyHeader sx={{ '& td': { py: 1.1 } }}>
                     <TableHead>
                       <TableRow sx={{ '& th': headCellSx }}>
@@ -561,7 +612,7 @@ const PoolAnalysisPage = () => {
                   </Table>
                 </TableContainer>
                 {sortedSimilarities.length > simLimit && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, borderTop: `1px solid ${tokens.border}` }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 0, md: 2.5 }, py: 1.5, borderTop: { md: `1px solid ${tokens.border}` } }}>
                     <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
                       Showing {fmt(simLimit)} of {fmt(sortedSimilarities.length)}
                     </Typography>

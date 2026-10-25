@@ -214,8 +214,22 @@ const TeamPage = () => {
                     key={w.gameId}
                     component={RouterLink}
                     to={yearPath(`/games/${w.gameId}`)}
-                    underline="hover"
-                    sx={{ display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: 500, lineHeight: 1.9 }}
+                    underline="none"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: 'fit-content',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      py: 0.6,
+                      pl: 1.25,
+                      pr: 0.5,
+                      mb: 0.75,
+                      borderRadius: 2,
+                      border: `1px solid ${tokens.border}`,
+                      transition: 'border-color 120ms, background-color 120ms',
+                      '&:hover': { borderColor: tokens.primary, bgcolor: tokens.primarySoft },
+                    }}
                   >
                     {ROUND_LABELS[getRoundNameFromGameId(w.gameId) as keyof typeof ROUND_LABELS].long}
                     <Box component="span" sx={{ color: tokens.muted, fontWeight: 400, ml: 1 }}>

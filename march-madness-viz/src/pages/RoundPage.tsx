@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
+  ButtonBase,
   CircularProgress,
   Link,
   MenuItem,
@@ -291,7 +292,49 @@ const RoundPage = () => {
       {view === 'games' && (
       <>
       <SectionHeading>Game details</SectionHeading>
-      <TableContainer sx={{ border: `1px solid ${tokens.border}`, borderRadius: 2.5, maxHeight: { md: 720 } }}>
+      <Box sx={{ display: { xs: 'block', md: 'none' }, borderTop: `1px solid ${tokens.border}` }}>
+        {sorted.map((r) => {
+          const pending = Object.entries(r.distribution).sort((a, b) => b[1] - a[1]);
+          const pendingTotal = pending.reduce((s, [, n]) => s + n, 0) || 1;
+          return (
+            <ButtonBase
+              key={r.gameId}
+              onClick={() => navigate(yearPath(`/games/${r.gameId}`))}
+              sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto 20px', alignItems: 'center', columnGap: 1.5, width: '100%', textAlign: 'left', py: 1.5, borderBottom: `1px solid ${tokens.border}` }}
+            >
+              <Box sx={{ minWidth: 0 }}>
+                <Typography noWrap sx={{ fontSize: '0.95rem' }}>
+                  {r.completed ? (
+                    <>
+                      <TeamLabel code={r.winner} seed={r.winnerSeed} bold />
+                      <Box component="span" sx={{ color: tokens.subtle, mx: 0.75 }}>def.</Box>
+                      <Box component="span" sx={{ color: tokens.muted }}><TeamLabel code={r.loser} seed={r.loserSeed} /></Box>
+                    </>
+                  ) : r.slots ? (
+                    <>
+                      <Slot slot={r.slots[0]} seedByTeam={seedByTeam} />
+                      <Box component="span" sx={{ color: tokens.subtle, mx: 0.75 }}>vs</Box>
+                      <Slot slot={r.slots[1]} seedByTeam={seedByTeam} />
+                    </>
+                  ) : (
+                    'TBD'
+                  )}
+                </Typography>
+                <Typography sx={{ fontSize: '0.8rem', color: tokens.muted, mt: 0.25 }}>
+                  {r.completed
+                    ? `${fmt(r.correct)} of ${fmt(r.total)} picked the winner`
+                    : `Pending · most picked ${pending[0]?.[0] ?? '—'} (${Math.round(((pending[0]?.[1] ?? 0) / pendingTotal) * 100)}%)`}
+                </Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: !r.completed ? tokens.muted : r.accuracy >= 50 ? tokens.up : tokens.down }}>
+                {r.completed ? `${Math.round(r.accuracy)}%` : '—'}
+              </Typography>
+              <ChevronRightIcon sx={{ fontSize: 18, color: tokens.subtle }} />
+            </ButtonBase>
+          );
+        })}
+      </Box>
+      <TableContainer sx={{ display: { xs: 'none', md: 'block' }, border: `1px solid ${tokens.border}`, borderRadius: 2.5, maxHeight: { md: 720 } }}>
         <Table size="small" stickyHeader sx={{ minWidth: 640, '& td, & th': { py: 1.25 } }}>
           <TableHead>
             <TableRow sx={{ '& th': { bgcolor: tokens.surfaceAlt } }}>

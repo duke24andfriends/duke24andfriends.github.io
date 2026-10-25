@@ -78,9 +78,9 @@ const Segmented = ({ value, onChange }: { value: View; onChange: (v: View) => vo
           onClick={() => onChange(v)}
           sx={{
             flex: 1,
-            py: 1,
+            py: { xs: 0.75, md: 1 },
             borderRadius: 999,
-            fontSize: '0.95rem',
+            fontSize: { xs: '0.9rem', md: '0.95rem' },
             fontWeight: active ? 600 : 500,
             color: active ? '#fff' : tokens.ink,
             bgcolor: active ? tokens.primary : 'transparent',
@@ -108,29 +108,23 @@ const FilterChip = ({
   <ButtonBase
     onClick={onClick}
     sx={{
-      gap: 0.5,
-      px: { xs: 1.25, sm: 1.5 },
-      py: 0.9,
+      gap: { xs: 0.25, sm: 0.5 },
+      px: { xs: 1, sm: 1.5 },
+      py: { xs: 0.75, sm: 0.9 },
       borderRadius: 2.5,
       border: `1px solid ${active ? tokens.primary : tokens.border}`,
       bgcolor: active ? tokens.primarySoft : tokens.surface,
       color: active ? tokens.primary : tokens.ink,
-      fontSize: '0.875rem',
+      fontSize: { xs: '0.825rem', sm: '0.875rem' },
       fontWeight: 500,
       whiteSpace: 'nowrap',
-      '& svg': { fontSize: 18 },
+      '& svg': { fontSize: { xs: 16, sm: 18 } },
     }}
   >
     {icon}
     {label}
     <KeyboardArrowDownIcon />
   </ButtonBase>
-);
-
-const ProgressBar = ({ value }: { value: number }) => (
-  <Box sx={{ height: 8, borderRadius: 4, bgcolor: '#e9edf2', overflow: 'hidden', flex: 1 }}>
-    <Box sx={{ height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, bgcolor: tokens.primary, borderRadius: 4 }} />
-  </Box>
 );
 
 /* ---------- row ---------- */
@@ -146,90 +140,89 @@ interface RowProps {
 }
 
 const StandingRow = ({ standing: s, round, expanded, inGroup, onToggleExpand, onToggleGroup, userPath }: RowProps) => {
+  const [showRounds, setShowRounds] = useState(false);
   const primary = round ? s.roundScores[round] : s.score;
-  const outOf = round ? ROUND_MAX_POINTS : s.maxPossible;
-  const pct = outOf > 0 ? Math.round((primary / outOf) * 100) : 0;
 
   return (
     <Box sx={{ borderBottom: `1px solid ${tokens.border}` }}>
-      <ButtonBase
-        onClick={onToggleExpand}
-        aria-expanded={expanded}
-        sx={{ width: '100%', display: 'block', textAlign: 'left', py: 2, px: { xs: 0, sm: 1 }, '&:hover': { bgcolor: { md: tokens.surfaceAlt } } }}
-      >
-        <Box sx={{ display: 'grid', gridTemplateColumns: '32px 48px minmax(0,1fr) auto 28px', alignItems: 'center', columnGap: 1.5 }}>
-          <Typography sx={{ fontSize: '1.3rem', fontWeight: 700, textAlign: 'center' }}>{s.rank}</Typography>
-          <InitialsAvatar name={s.fullName} seed={s.username} size={48} highlight={s.rank === 1} />
+      <Box sx={{ display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto 36px', alignItems: 'center', columnGap: 1, py: 1.25, px: { xs: 0, sm: 1 } }}>
+        <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, textAlign: 'center' }}>{s.rank}</Typography>
+        <Box
+          component={RouterLink}
+          to={userPath}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0, color: 'inherit', textDecoration: 'none', borderRadius: 2, py: 0.25, '&:hover .name': { color: tokens.primary } }}
+        >
+          <InitialsAvatar name={s.fullName} seed={s.username} size={36} highlight={s.rank === 1} />
           <Box sx={{ minWidth: 0 }}>
-            <Typography noWrap sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
+            <Typography className="name" noWrap sx={{ fontWeight: 700, fontSize: '0.975rem' }}>
               {s.fullName}
             </Typography>
-            <Typography noWrap sx={{ color: tokens.muted, fontSize: '0.9rem' }}>
+            <Typography noWrap sx={{ color: tokens.muted, fontSize: '0.825rem' }}>
               {s.bracketName}
             </Typography>
           </Box>
-          <Box sx={{ textAlign: 'right' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-              <Typography sx={{ fontSize: '1.2rem', fontWeight: 700 }}>{fmt(primary)}</Typography>
-              {!round && s.rankChange !== 0 && (
-                <ChangeIndicator value={s.rankChange} label={String(Math.abs(s.rankChange))} fontSize="0.85rem" />
-              )}
-            </Box>
-            <Typography sx={{ color: tokens.muted, fontSize: '0.85rem' }}>
-              {round ? `of ${ROUND_MAX_POINTS} in ${ROUND_LABELS[round].short}` : `${fmt(s.maxPossible)} max`}
-            </Typography>
-          </Box>
-          <Box sx={{ color: tokens.ink, display: 'flex', justifyContent: 'center' }}>
-            {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </Box>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1.25, ml: { xs: 0, sm: '44px' } }}>
-          <ProgressBar value={pct} />
-          <Typography sx={{ color: tokens.muted, fontSize: '0.8rem', whiteSpace: 'nowrap', minWidth: 78, textAlign: 'right' }}>
-            {pct}% of max
+        <Box sx={{ textAlign: 'right' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '1.05rem', fontWeight: 700 }}>{fmt(primary)}</Typography>
+            {!round && s.rankChange !== 0 && (
+              <ChangeIndicator value={s.rankChange} label={String(Math.abs(s.rankChange))} fontSize="0.8rem" />
+            )}
+          </Box>
+          <Typography sx={{ color: tokens.muted, fontSize: '0.775rem' }}>
+            {round ? `of ${ROUND_MAX_POINTS} in ${ROUND_LABELS[round].short}` : `${fmt(s.maxPossible)} max`}
           </Typography>
         </Box>
-      </ButtonBase>
+        <ButtonBase
+          onClick={onToggleExpand}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Hide details' : 'Show details'}
+          sx={{ width: 36, height: 36, borderRadius: '50%', color: tokens.muted, '&:hover': { bgcolor: tokens.surfaceAlt, color: tokens.ink } }}
+        >
+          {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+        </ButtonBase>
+      </Box>
 
       <Collapse in={expanded} unmountOnExit>
-        <Box sx={{ pb: 2, px: { xs: 0, sm: 1 } }}>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-              bgcolor: tokens.surfaceAlt,
-              borderRadius: 2,
-              py: 1.5,
-            }}
-          >
-            {ROUND_ORDER.map((r, i) => (
-              <Box key={r} sx={{ px: { xs: 0.75, sm: 2 }, borderLeft: i ? `1px solid ${tokens.border}` : 'none', minWidth: 0 }}>
-                <Typography sx={{ color: tokens.muted, fontSize: '0.8rem', mb: 0.5 }}>{ROUND_LABELS[r].short}</Typography>
-                <Typography sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' }, lineHeight: 1.3 }}>
-                  <Box component="span" sx={{ fontWeight: 700 }}>{s.roundScores[r]}</Box>{' '}
-                  <Box component="span" sx={{ color: tokens.muted, fontSize: { xs: '0.72rem', sm: 'inherit' }, whiteSpace: 'nowrap' }}>/ {ROUND_MAX_POINTS}</Box>
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mt: 1.5 }}>
-            {s.champion && (
-              <Typography sx={{ fontSize: '0.875rem', color: tokens.muted, mr: 'auto' }}>
-                Champion pick: <Box component="span" sx={{ color: tokens.ink, fontWeight: 600 }}>{s.champion}</Box>
-              </Typography>
-            )}
+        <Box sx={{ pb: 1.5, pl: { xs: '36px', sm: '44px' }, pr: { xs: 0, sm: 1 } }}>
+          {s.champion && (
+            <Typography sx={{ fontSize: '0.85rem', color: tokens.muted, mb: 0.75 }}>
+              Champion pick: <Box component="span" sx={{ color: tokens.ink, fontWeight: 600 }}>{s.champion}</Box>
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', columnGap: 1 }}>
+            <ButtonBase
+              onClick={() => setShowRounds((v) => !v)}
+              aria-expanded={showRounds}
+              sx={{ py: 0.5, gap: 0.25, fontSize: '0.825rem', fontWeight: 600, color: tokens.primary, borderRadius: 1, whiteSpace: 'nowrap' }}
+            >
+              Round breakdown
+              <KeyboardArrowDownIcon sx={{ fontSize: 18, transform: showRounds ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
+            </ButtonBase>
+            <Box sx={{ flex: 1 }} />
             <Button
               size="small"
               variant={inGroup ? 'contained' : 'outlined'}
               startIcon={inGroup ? <PersonRemoveOutlinedIcon /> : <PersonAddAltIcon />}
               onClick={onToggleGroup}
+              sx={{ whiteSpace: 'nowrap' }}
             >
               {inGroup ? 'In group' : 'Add to group'}
             </Button>
-            <Button size="small" component={RouterLink} to={userPath}>
+            <Button size="small" component={RouterLink} to={userPath} sx={{ display: { xs: 'none', sm: 'inline-flex' }, whiteSpace: 'nowrap' }}>
               View bracket →
             </Button>
           </Box>
+          <Collapse in={showRounds} unmountOnExit>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', bgcolor: tokens.surfaceAlt, borderRadius: 2, py: 1, mt: 0.5 }}>
+              {ROUND_ORDER.map((r, i) => (
+                <Box key={r} sx={{ px: { xs: 0.5, sm: 1.5 }, borderLeft: i ? `1px solid ${tokens.border}` : 'none', minWidth: 0, textAlign: 'center' }}>
+                  <Typography sx={{ color: tokens.muted, fontSize: '0.72rem' }}>{ROUND_LABELS[r].short}</Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>{s.roundScores[r]}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Collapse>
         </Box>
       </Collapse>
     </Box>
@@ -336,12 +329,6 @@ const Leaderboard = () => {
   const [menu, setMenu] = useState<{ type: 'members' | 'rounds' | 'sort'; anchor: HTMLElement } | null>(null);
 
   useEffect(() => {
-    if (standings[0] && expanded.size === 0) setExpanded(new Set([standings[0].username]));
-    // Only seed the default expansion once data arrives.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [standings.length]);
-
-  useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (groupOnly && group.length) params.set('users', group.join(','));
     else params.delete('users');
@@ -418,18 +405,50 @@ const Leaderboard = () => {
 
   return (
     <Box sx={{ maxWidth: 960 }}>
-      <Typography component="h1" sx={{ fontSize: { xs: '2rem', md: '2.6rem' }, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1, mb: 2.5 }}>
+      <Typography component="h1" sx={{ fontSize: { xs: '1.8rem', md: '2.6rem' }, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1, mb: { xs: 1.5, md: 2.5 } }}>
         Leaderboard
       </Typography>
 
       <Segmented value={view} onChange={setView} />
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2.5, mb: 1, flexWrap: 'wrap' }}>
+      {view === 'standings' && (
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search people or brackets"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ mt: { xs: 1.5, md: 2.5 }, '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: tokens.subtle }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+      )}
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          mt: 1.25,
+          mb: 1,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+          mx: { xs: -2, sm: 0 },
+          px: { xs: 2, sm: 0 },
+          '& > *': { flexShrink: 0 },
+        }}
+      >
         <FilterChip label={membersLabel} active={groupOnly && group.length > 0} onClick={(e) => setMenu({ type: 'members', anchor: e.currentTarget })} />
         {view === 'standings' && (
           <>
             <FilterChip label={round ? ROUND_LABELS[round].long : 'All rounds'} active={!!round} onClick={(e) => setMenu({ type: 'rounds', anchor: e.currentTarget })} />
-            <Box sx={{ flexGrow: 1, minWidth: 8 }} />
+            <Box sx={{ flexGrow: 1, minWidth: 0 }} />
             <FilterChip label={round ? 'Round points' : SORT_LABELS[sortKey]} icon={<SwapVertIcon />} onClick={(e) => setMenu({ type: 'sort', anchor: e.currentTarget })} />
           </>
         )}
@@ -437,21 +456,6 @@ const Leaderboard = () => {
 
       {view === 'standings' ? (
         <>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search people or brackets"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ mt: 1, mb: 1, '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: tokens.subtle }} />
-                </InputAdornment>
-              ),
-            }}
-          />
 
           {group.length > 0 && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1, flexWrap: 'wrap' }}>

@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { Box, ButtonBase, Typography } from '@mui/material';
+import SegmentedControl from '../ui/SegmentedControl';
 import { tokens } from '../../theme';
 
 export interface RegionLayout {
@@ -75,6 +77,18 @@ const CompactSlot = ({ team, seed, state, onClick }: { team: string; seed?: numb
 };
 
 const FullBracket = ({ regions, semis, championshipId, getTeams, getSeed, getActualWinner, getPredictedWinner, onPick, onRegionSelect }: FullBracketProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [fit, setFit] = useState(true);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setContainerWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const games: Array<{ id: string; x: number; y: number; w: number }> = [];
   const paths: string[] = [];
 
@@ -129,9 +143,31 @@ const FullBracket = ({ regions, semis, championshipId, getTeams, getSeed, getAct
     return getPredictedWinner(gameId) === team ? 'picked' : 'open';
   };
 
+  const ratio = containerWidth > 0 ? Math.min(1, containerWidth / WIDTH) : 1;
+  /* Slightly narrow screens just shrink to fit; phones get a fit / zoom toggle since fitted slots are too small to tap. */
+  const tooWide = ratio < 0.8;
+  const scale = !tooWide || fit ? ratio : 1;
+
   return (
-    <Box sx={{ overflowX: 'auto', pb: 1 }}>
-      <Box sx={{ position: 'relative', width: WIDTH, minWidth: WIDTH, mx: 'auto' }}>
+    <Box ref={containerRef}>
+      {tooWide && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1.5 }}>
+          <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
+            {fit ? 'Bird’s-eye view · zoom in to make picks' : 'Drag sideways to explore →'}
+          </Typography>
+          <SegmentedControl
+            size="small"
+            value={fit ? 'fit' : 'zoom'}
+            onChange={(v) => setFit(v === 'fit')}
+            options={[
+              { value: 'fit', label: 'Fit' },
+              { value: 'zoom', label: 'Zoom in' },
+            ]}
+          />
+        </Box>
+      )}
+    <Box sx={{ overflowX: fit && tooWide ? 'hidden' : 'auto', pb: 1, mx: tooWide && !fit ? { xs: -2, sm: 0 } : 0, px: tooWide && !fit ? { xs: 2, sm: 0 } : 0 }}>
+      <Box sx={{ position: 'relative', width: WIDTH, minWidth: WIDTH, mx: 'auto', zoom: scale }}>
         {/* Round headers */}
         <Box sx={{ position: 'relative', height: HEADER_H }}>
           {ROUND_HEADERS.map((label, round) => (
@@ -239,6 +275,7 @@ const FullBracket = ({ regions, semis, championshipId, getTeams, getSeed, getAct
           </Box>
         </Box>
       </Box>
+    </Box>
     </Box>
   );
 };
