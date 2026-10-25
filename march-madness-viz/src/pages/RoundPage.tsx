@@ -22,7 +22,7 @@ import { ROUNDS } from '../types';
 import { useYearPath } from '../utils/yearRouting';
 import { getRoundPageMatchupSlots, type MatchupSlot } from '../utils/bracketLogic';
 import { ROUND_LABELS, ROUND_ORDER, RoundKey } from '../hooks/usePoolStandings';
-import PageTitle, { SectionHeading } from '../components/ui/PageTitle';
+import PageTitle from '../components/ui/PageTitle';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Meter from '../components/ui/Meter';
 import { tokens } from '../theme';
@@ -143,6 +143,16 @@ const RoundPage = () => {
     return counts.map((users, correct) => ({ correct, users })).reverse();
   }, [bracketData, rows]);
   const maxUsers = Math.max(1, ...distribution.map((d) => d.users));
+  const medianCorrect = useMemo(() => {
+    const total = distribution.reduce((s, d) => s + d.users, 0);
+    if (!total) return null;
+    let seen = 0;
+    for (const d of [...distribution].reverse()) {
+      seen += d.users;
+      if (seen > total / 2) return d.correct;
+    }
+    return null;
+  }, [distribution]);
 
   const sorted = useMemo(() => {
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -272,17 +282,30 @@ const RoundPage = () => {
               {completed.length === 0 ? (
                 <Typography sx={{ color: tokens.muted, py: 4 }}>No games in this round have been played yet.</Typography>
               ) : (
+                <>
+                {medianCorrect !== null && (
+                  <Box sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, px: 1.5, py: 0.75, mb: 2, borderRadius: 2, bgcolor: tokens.primarySoft }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: tokens.muted }}>Median bracket:</Typography>
+                    <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: tokens.primaryDark }}>
+                      {medianCorrect} of {completed.length} correct
+                    </Typography>
+                  </Box>
+                )}
                 <Box sx={{ display: 'grid', gridTemplateColumns: '90px 1fr 56px', alignItems: 'center', columnGap: 2, rowGap: 0.75 }}>
-                  {distribution.map((d) => (
+                  {distribution.map((d) => {
+                    const isMedian = d.correct === medianCorrect;
+                    return (
                     <Box key={d.correct} sx={{ display: 'contents' }}>
-                      <Typography sx={{ fontSize: '0.8rem', color: tokens.body, whiteSpace: 'nowrap' }}>
+                      <Typography sx={{ fontSize: '0.8rem', color: isMedian ? tokens.ink : tokens.body, fontWeight: isMedian ? 700 : 400, whiteSpace: 'nowrap' }}>
                         {d.correct} of {completed.length}
                       </Typography>
                       <Meter value={(d.users / maxUsers) * 100} height={10} />
                       <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, textAlign: 'right' }}>{fmt(d.users)}</Typography>
                     </Box>
-                  ))}
+                    );
+                  })}
                 </Box>
+                </>
               )}
             </>
           )}
@@ -291,7 +314,12 @@ const RoundPage = () => {
 
       {view === 'games' && (
       <>
-      <SectionHeading>Game details</SectionHeading>
+      <Box sx={{ mb: 2 }}>
+        <Typography component="h2" sx={{ fontSize: { xs: '1.15rem', md: '1.25rem' }, fontWeight: 700, letterSpacing: '-0.01em' }}>
+          All games in {ROUND_LABELS[round].long}
+        </Typography>
+        <Typography sx={{ color: tokens.muted, fontSize: '0.875rem', mt: 0.25 }}>Select a game to see picks and pool impact.</Typography>
+      </Box>
       <Box sx={{ display: { xs: 'block', md: 'none' }, borderTop: `1px solid ${tokens.border}` }}>
         {sorted.map((r) => {
           const pending = Object.entries(r.distribution).sort((a, b) => b[1] - a[1]);

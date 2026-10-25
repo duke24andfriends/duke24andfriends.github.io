@@ -23,7 +23,6 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { useData } from '../context/DataContext';
 import { useYearPath } from '../utils/yearRouting';
 import { getRoundNameFromGameId } from '../types';
@@ -55,8 +54,6 @@ const METRICS: Record<
     title: string;
     tableTitle: string;
     column: string;
-    linkTitle: string;
-    linkBody: string;
     definition: string;
     low: [string, string];
     high: [string, string];
@@ -70,8 +67,6 @@ const METRICS: Record<
     title: 'Chalk score',
     tableTitle: 'Most chalky brackets',
     column: 'Chalk score',
-    linkTitle: 'Most chalky brackets',
-    linkBody: 'Brackets that stick with the higher seeds.',
     definition:
       'Measures how often a bracket picks the higher-seeded team (favorites). Higher scores indicate a more chalky bracket with fewer upsets.',
     low: ['More upsets', '(less chalk)'],
@@ -86,8 +81,6 @@ const METRICS: Record<
     title: 'Herding score',
     tableTitle: 'Most herding brackets',
     column: 'Herding score',
-    linkTitle: 'Most herding brackets',
-    linkBody: 'Brackets that make similar picks to the rest of your pool.',
     definition:
       'Measures how often a bracket goes with the pool’s most popular pick. Higher scores mean a bracket that follows the crowd.',
     low: ['More independent', '(fewer crowd picks)'],
@@ -102,8 +95,6 @@ const METRICS: Record<
     title: 'Contrarian score',
     tableTitle: 'Most contrarian brackets',
     column: 'Contrarian score',
-    linkTitle: 'Most contrarian brackets',
-    linkBody: 'Brackets that make different picks from the rest of your pool.',
     definition:
       'Measures how far a bracket strays from the pool consensus, and how unpopular those off-consensus picks were. Higher scores mean bolder brackets.',
     low: ['With the pool', '(few lone picks)'],
@@ -308,8 +299,6 @@ const PoolAnalysisPage = () => {
 
   const selected = standingByUser.get(selectedUser) ?? null;
   const markerPct = Math.min(100, (poolMedian / scaleMax) * 100);
-  const otherMetrics = (Object.keys(METRICS) as Metric[]).filter((m) => m !== metric);
-
   return (
     <Box>
       <PageTitle subtitle="Explore how your pool is picking, and find similar brackets.">Pool analysis</PageTitle>
@@ -451,46 +440,6 @@ const PoolAnalysisPage = () => {
             </Box>
           </Box>
 
-          {/* Cross-links to the other two metrics */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 0, md: 2 }, mt: 3, borderTop: { xs: `1px solid ${tokens.border}`, md: 'none' } }}>
-            {otherMetrics.map((m) => (
-              <ButtonBase
-                key={m}
-                onClick={() => {
-                  setMetric(m);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 2,
-                  textAlign: 'left',
-                  border: { md: `1px solid ${tokens.border}` },
-                  borderBottom: { xs: `1px solid ${tokens.border}` },
-                  borderRadius: { md: 3 },
-                  px: { xs: 0, md: 2.5 },
-                  py: { xs: 1.5, md: 2 },
-                  transition: 'border-color 150ms',
-                  '&:hover': { borderColor: { md: tokens.primary } },
-                }}
-              >
-                <Box>
-                  <Typography sx={{ fontWeight: { xs: 600, md: 700 }, fontSize: { xs: '0.95rem', md: '1rem' } }}>{METRICS[m].linkTitle}</Typography>
-                  <Typography sx={{ display: { xs: 'none', md: 'block' }, fontSize: '0.825rem', color: tokens.muted }}>{METRICS[m].linkBody}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
-                  <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.primarySoft, display: { xs: 'none', md: 'grid' }, placeItems: 'center' }}>
-                    <GroupsOutlinedIcon sx={{ fontSize: 22, color: tokens.primary }} />
-                  </Box>
-                  <Typography sx={{ display: { xs: 'none', md: 'block' }, fontSize: '0.825rem', color: tokens.primary, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    View {METRICS[m].label.toLowerCase()} rankings
-                  </Typography>
-                  <ChevronRightIcon sx={{ color: tokens.primary }} />
-                </Box>
-              </ButtonBase>
-            ))}
-          </Box>
         </>
       ) : (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '280px minmax(0, 1fr)', lg: '300px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
@@ -538,8 +487,8 @@ const PoolAnalysisPage = () => {
                   <dd>Overlap of picks, with each pick weighted by its round’s points (10 → 320). Late-round agreement counts most.</dd>
                   <dt>Regular</dt>
                   <dd>Share of picks in common, every game counted equally (Jaccard index).</dd>
-                  <dt>Shared points</dt>
-                  <dd>Total point value of the picks both brackets made.</dd>
+                  <dt>Shared possible points</dt>
+                  <dd>Total point value of the picks both brackets made the same, whether or not those picks turned out right.</dd>
                 </Box>
               </Disclosure>
             </Box>
@@ -562,7 +511,7 @@ const PoolAnalysisPage = () => {
                       position={i + 1}
                       s={r.standing}
                       value={`${(r.weighted * 100).toFixed(1)}%`}
-                      detail={`Regular ${(r.regular * 100).toFixed(0)}% · ${fmt(r.shared)} shared pts · ${fmt(r.score)} score`}
+                      detail={`Regular ${(r.regular * 100).toFixed(0)}% · ${fmt(r.shared)} shared possible pts · ${fmt(r.score)} score`}
                       onClick={() => openProfile(r.username)}
                     />
                   ))}
@@ -578,7 +527,7 @@ const PoolAnalysisPage = () => {
                           [
                             ['weighted', 'Weighted'],
                             ['regular', 'Regular'],
-                            ['shared', 'Shared pts'],
+                            ['shared', 'Shared possible points'],
                             ['score', 'Score'],
                           ] as Array<[SimKey, string]>
                         ).map(([key, label]) => (

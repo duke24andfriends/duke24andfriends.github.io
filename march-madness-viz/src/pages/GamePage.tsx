@@ -83,6 +83,7 @@ interface Group {
 }
 
 const PickGroup = ({ group, onOpen }: { group: Group; onOpen: (u: string) => void }) => {
+  const { yearPath } = useYearPath();
   const [query, setQuery] = useState('');
   const [asc, setAsc] = useState(false);
   const [page, setPage] = useState(1);
@@ -103,7 +104,10 @@ const PickGroup = ({ group, onOpen }: { group: Group; onOpen: (u: string) => voi
     <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, overflow: 'hidden', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', px: 2.5, py: 1.75 }}>
         <Typography component="h2" sx={{ fontSize: '1.15rem', fontWeight: 700 }}>
-          Picked <Box component="span" sx={{ color: toneColor[group.tone] }}>{group.team}</Box>{' '}
+          Picked{' '}
+          <Link component={RouterLink} to={yearPath(`/teams/${group.team}`)} underline="hover" sx={{ color: toneColor[group.tone] }}>
+            {group.team}
+          </Link>{' '}
           <Box component="span" sx={{ color: tokens.muted, fontWeight: 500 }}>({fmt(group.users.length)})</Box>
         </Typography>
         <TextField
@@ -302,7 +306,16 @@ const GamePage = () => {
             {result ? 'Completed' : 'Not played yet'}
           </Box>
           <Typography sx={{ mt: 0.75, fontWeight: 600, color: result ? tokens.up : tokens.muted, fontSize: '0.95rem' }}>
-            {result ? `${result.winner} advanced` : `${ROUND_LABELS[round].long} · ${points} pts`}
+            {result ? (
+              <>
+                <Link component={RouterLink} to={yearPath(`/teams/${result.winner}`)} underline="hover" color="inherit">
+                  {result.winner}
+                </Link>{' '}
+                advanced
+              </>
+            ) : (
+              `${ROUND_LABELS[round].long} · ${points} pts`
+            )}
           </Typography>
         </Box>
         <TeamSide code={right} seed={right ? seedByTeam[right] : undefined} tone={rightTone} align="right" yearPath={yearPath} />
@@ -374,7 +387,8 @@ const GamePage = () => {
 
       {/* Rank movement from this game */}
       {movers && (movers.up.length > 0 || movers.down.length > 0) && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 2, md: 5 }, py: 2.5, borderBottom: `1px solid ${tokens.border}` }}>
+        <Box sx={{ py: 2.5, borderBottom: `1px solid ${tokens.border}` }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 2, md: 5 } }}>
           {(
             [
               ['Biggest climbers after this game', movers.up, tokens.up, '▲'],
@@ -399,6 +413,8 @@ const GamePage = () => {
               )}
             </Box>
           ))}
+        </Box>
+        <Typography sx={{ fontSize: '0.75rem', color: tokens.subtle, mt: 1.5 }}>Rank change caused by this result.</Typography>
         </Box>
       )}
 

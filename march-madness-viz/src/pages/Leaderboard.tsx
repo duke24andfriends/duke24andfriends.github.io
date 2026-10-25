@@ -8,7 +8,6 @@ import {
   CircularProgress,
   Collapse,
   InputAdornment,
-  Link,
   ListItemIcon,
   Menu,
   MenuItem,
@@ -24,16 +23,6 @@ import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
-import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-} from 'chart.js';
 import { useData } from '../context/DataContext';
 import { useYearPath } from '../utils/yearRouting';
 import {
@@ -48,10 +37,7 @@ import InitialsAvatar from '../components/ui/InitialsAvatar';
 import ChangeIndicator from '../components/ui/ChangeIndicator';
 import { tokens } from '../theme';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
-
 type SortKey = 'score' | 'maxPossible' | 'movers' | 'name';
-type View = 'standings' | 'trend';
 
 const SORT_LABELS: Record<SortKey, string> = {
   score: 'Total points',
@@ -61,38 +47,10 @@ const SORT_LABELS: Record<SortKey, string> = {
 };
 
 const PAGE_SIZE = 50;
-const TREND_DEFAULT_COUNT = 10;
-const TREND_COLORS = ['#1565d8', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777', '#4f46e5', '#65a30d', '#0f766e', '#b91c1c'];
 
 const fmt = (n: number) => n.toLocaleString();
 
 /* ---------- small pieces ---------- */
-
-const Segmented = ({ value, onChange }: { value: View; onChange: (v: View) => void }) => (
-  <Box sx={{ display: 'flex', p: 0.5, bgcolor: tokens.surfaceAlt, borderRadius: 999, maxWidth: 520 }}>
-    {(['standings', 'trend'] as View[]).map((v) => {
-      const active = v === value;
-      return (
-        <ButtonBase
-          key={v}
-          onClick={() => onChange(v)}
-          sx={{
-            flex: 1,
-            py: { xs: 0.75, md: 1 },
-            borderRadius: 999,
-            fontSize: { xs: '0.9rem', md: '0.95rem' },
-            fontWeight: active ? 600 : 500,
-            color: active ? '#fff' : tokens.ink,
-            bgcolor: active ? tokens.primary : 'transparent',
-            transition: 'background-color 150ms',
-          }}
-        >
-          {v === 'standings' ? 'Standings' : 'Score trend'}
-        </ButtonBase>
-      );
-    })}
-  </Box>
-);
 
 const FilterChip = ({
   label,
@@ -229,82 +187,6 @@ const StandingRow = ({ standing: s, round, expanded, inGroup, onToggleExpand, on
   );
 };
 
-/* ---------- trend ---------- */
-
-const ScoreTrend = ({ standings, group }: { standings: Standing[]; group: Standing[] }) => {
-  const { gameResults } = useData();
-  const shown = group.length ? group : standings.slice(0, TREND_DEFAULT_COUNT);
-  const ordered = useMemo(() => [...gameResults].sort((a, b) => a.order - b.order), [gameResults]);
-
-  if (!ordered.length) {
-    return <Typography sx={{ color: tokens.muted, py: 6, textAlign: 'center' }}>No games played yet.</Typography>;
-  }
-
-  const data = {
-    labels: ordered.map((g) => `${g.winner} over ${g.loser}`),
-    datasets: shown.map((s, i) => {
-      const color = TREND_COLORS[i % TREND_COLORS.length];
-      return {
-        label: s.fullName,
-        data: s.history,
-        borderColor: color,
-        backgroundColor: color,
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.25,
-      };
-    }),
-  };
-
-  return (
-    <Box>
-      <Typography sx={{ color: tokens.muted, fontSize: '0.875rem', mb: 2 }}>
-        {group.length ? `Your group of ${group.length}` : `Top ${shown.length}`} · cumulative points after each game
-      </Typography>
-      <Box sx={{ height: { xs: 360, md: 480 } }}>
-        <Line
-          data={data}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-              legend: {
-                position: 'bottom',
-                labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 14, font: { family: 'Inter' } },
-              },
-              tooltip: {
-                itemSort: (a, b) => (b.parsed.y ?? 0) - (a.parsed.y ?? 0),
-                titleFont: { family: 'Inter' },
-                bodyFont: { family: 'Inter' },
-              },
-            },
-            scales: {
-              x: {
-                grid: { display: false },
-                ticks: {
-                  font: { family: 'Inter', size: 11 },
-                  color: tokens.muted,
-                  maxRotation: 0,
-                  autoSkip: true,
-                  maxTicksLimit: 8,
-                  callback: (_, index) => `G${index + 1}`,
-                },
-              },
-              y: {
-                grid: { color: tokens.divider },
-                border: { display: false },
-                ticks: { font: { family: 'Inter', size: 11 }, color: tokens.muted },
-              },
-            },
-          }}
-        />
-      </Box>
-    </Box>
-  );
-};
-
 /* ---------- page ---------- */
 
 const Leaderboard = () => {
@@ -314,7 +196,6 @@ const Leaderboard = () => {
   const navigate = useNavigate();
   const { standings } = usePoolStandings(1);
 
-  const [view, setView] = useState<View>('standings');
   const [search, setSearch] = useState('');
   const [round, setRound] = useState<RoundKey | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('score');
@@ -409,25 +290,21 @@ const Leaderboard = () => {
         Leaderboard
       </Typography>
 
-      <Segmented value={view} onChange={setView} />
-
-      {view === 'standings' && (
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Search people or brackets"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ mt: { xs: 1.5, md: 2.5 }, '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ color: tokens.subtle }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-      )}
+      <TextField
+        fullWidth
+        size="small"
+        placeholder="Search people or brackets"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon sx={{ color: tokens.subtle }} />
+            </InputAdornment>
+          ),
+        }}
+      />
 
       <Box
         sx={{
@@ -445,17 +322,12 @@ const Leaderboard = () => {
         }}
       >
         <FilterChip label={membersLabel} active={groupOnly && group.length > 0} onClick={(e) => setMenu({ type: 'members', anchor: e.currentTarget })} />
-        {view === 'standings' && (
-          <>
-            <FilterChip label={round ? ROUND_LABELS[round].long : 'All rounds'} active={!!round} onClick={(e) => setMenu({ type: 'rounds', anchor: e.currentTarget })} />
-            <Box sx={{ flexGrow: 1, minWidth: 0 }} />
-            <FilterChip label={round ? 'Round points' : SORT_LABELS[sortKey]} icon={<SwapVertIcon />} onClick={(e) => setMenu({ type: 'sort', anchor: e.currentTarget })} />
-          </>
-        )}
+        <FilterChip label={round ? ROUND_LABELS[round].long : 'All rounds'} active={!!round} onClick={(e) => setMenu({ type: 'rounds', anchor: e.currentTarget })} />
+        <Box sx={{ flexGrow: 1, minWidth: 0 }} />
+        <FilterChip label={round ? 'Round points' : SORT_LABELS[sortKey]} icon={<SwapVertIcon />} onClick={(e) => setMenu({ type: 'sort', anchor: e.currentTarget })} />
       </Box>
 
-      {view === 'standings' ? (
-        <>
+      <>
 
           {group.length > 0 && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1, flexWrap: 'wrap' }}>
@@ -500,20 +372,6 @@ const Leaderboard = () => {
             </Box>
           )}
         </>
-      ) : (
-        <Box sx={{ mt: 2 }}>
-          <ScoreTrend standings={standings} group={groupStandings} />
-          {!group.length && (
-            <Typography sx={{ color: tokens.muted, fontSize: '0.85rem', mt: 2 }}>
-              Tip: open anyone in{' '}
-              <Link component="button" onClick={() => setView('standings')} sx={{ fontSize: 'inherit', verticalAlign: 'baseline' }}>
-                Standings
-              </Link>{' '}
-              and tap “Add to group” to chart your own comparison.
-            </Typography>
-          )}
-        </Box>
-      )}
 
       <Menu anchorEl={menu?.anchor} open={!!menu} onClose={closeMenu} PaperProps={{ variant: 'outlined', sx: { mt: 0.5, minWidth: 200 } }}>
         {menu?.type === 'members' && [

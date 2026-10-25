@@ -11,6 +11,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -20,7 +21,6 @@ import { getMostRecentRound } from '../utils/mostRecentRound';
 import { ROUND_LABELS, ROUND_ORDER, Standing, usePoolStandings } from '../hooks/usePoolStandings';
 import InitialsAvatar from '../components/ui/InitialsAvatar';
 import ChangeIndicator from '../components/ui/ChangeIndicator';
-import Sparkline from '../components/ui/Sparkline';
 import { tokens } from '../theme';
 
 const LOOKBACK_OPTIONS = [
@@ -31,8 +31,6 @@ const LOOKBACK_OPTIONS = [
 
 const LEADERBOARD_ROWS = 10;
 const MOVEMENT_ROWS = 5;
-const SPARKLINE_POINTS = 24;
-
 const SectionTitle = ({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) => (
   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2 }}>
     <Typography component="h2" sx={{ fontSize: { xs: '1.2rem', md: '1.3rem' }, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
@@ -142,9 +140,8 @@ const Home = () => {
               <TableCell align="right">Score</TableCell>
               <TableCell align="right" sx={{ display: { xs: 'none', md: 'table-cell' } }}>Max Possible</TableCell>
               <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                {lookback === 1 ? 'Last Game' : `Last ${lookback}`}
+                {lookback === 1 ? 'Since last game' : `Last ${lookback} games`}
               </TableCell>
-              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Trend</TableCell>
               <TableCell sx={{ width: 20, p: 0 }} />
             </TableRow>
           </TableHead>
@@ -178,10 +175,16 @@ const Home = () => {
                   {fmt(s.maxPossible)}
                 </TableCell>
                 <TableCell align="right">
-                  <ChangeIndicator value={s.delta} />
-                </TableCell>
-                <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, lineHeight: 0 }}>
-                  <Sparkline values={s.history.slice(-SPARKLINE_POINTS)} />
+                  <Tooltip title={`${s.delta >= 0 ? '+' : ''}${fmt(s.delta)} pts ${lookbackLabel === 'last game' ? 'in the last game' : `over the ${lookbackLabel}`}`} placement="left">
+                    <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      {s.rankChange !== 0 ? (
+                        <ChangeIndicator value={s.rankChange} label={String(Math.abs(s.rankChange))} />
+                      ) : (
+                        <Box component="span" sx={{ color: tokens.subtle, fontSize: '0.85rem' }}>–</Box>
+                      )}
+                      <Box component="span" sx={{ fontSize: '0.72rem', color: tokens.muted }}>+{fmt(s.delta)} pts</Box>
+                    </Box>
+                  </Tooltip>
                 </TableCell>
                 <TableCell sx={{ width: 20, p: 0, lineHeight: 0 }}>
                   <ChevronRightIcon className="row-chevron" sx={{ fontSize: 18, color: tokens.subtle, transition: 'transform 120ms, color 120ms' }} />

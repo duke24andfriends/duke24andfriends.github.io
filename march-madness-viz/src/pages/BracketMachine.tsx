@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   ButtonBase,
@@ -65,6 +66,7 @@ const FILL_OPTIONS: Array<{ key: FillStrategy; label: string; hint: string }> = 
 
 const ALL_GAME_IDS = Array.from({ length: 63 }, (_, i) => String(i + 1));
 const STANDINGS_PAGE = 50;
+const ROOT_FOR_LIMIT = 5;
 
 interface ScenarioRow {
   username: string;
@@ -86,7 +88,7 @@ function competitionRanks(rows: Array<{ username: string; score: number }>): Map
   return ranks;
 }
 
-const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: boolean }) => {
+const ScenarioStandings = ({ rows, hasPicks, highlight }: { rows: ScenarioRow[]; hasPicks: boolean; highlight?: string | null }) => {
   const { yearPath } = useYearPath();
   const [search, setSearch] = useState('');
   const [visible, setVisible] = useState(STANDINGS_PAGE);
@@ -94,6 +96,9 @@ const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: 
   const filtered = q
     ? rows.filter((r) => r.fullName.toLowerCase().includes(q) || r.bracketName.toLowerCase().includes(q) || r.username.toLowerCase().includes(q))
     : rows;
+  const highlighted = highlight ? filtered.find((r) => r.username === highlight) : undefined;
+  const shownRows = filtered.slice(0, visible);
+  if (highlighted && !shownRows.includes(highlighted)) shownRows.push(highlighted);
 
   return (
     <Box>
@@ -115,7 +120,9 @@ const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: 
           ),
         }}
       />
-      {filtered.slice(0, visible).map((r) => (
+      {shownRows.map((r) => {
+        const isHighlight = r.username === highlight;
+        return (
         <Box
           key={r.username}
           component={RouterLink}
@@ -126,10 +133,15 @@ const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: 
             alignItems: 'center',
             columnGap: 1.25,
             py: 1.1,
+            px: isHighlight ? 1 : 0,
+            mx: isHighlight ? -1 : 0,
+            borderRadius: isHighlight ? 2 : 0,
             borderBottom: `1px solid ${tokens.divider}`,
+            bgcolor: isHighlight ? tokens.primarySoft : 'transparent',
+            boxShadow: isHighlight ? `inset 3px 0 0 ${tokens.primary}` : 'none',
             color: 'inherit',
             textDecoration: 'none',
-            '&:hover': { bgcolor: tokens.surfaceAlt },
+            '&:hover': { bgcolor: isHighlight ? tokens.primarySoft : tokens.surfaceAlt },
           }}
         >
           <Typography sx={{ fontWeight: 700, textAlign: 'center', fontSize: '0.9rem' }}>{r.rank}</Typography>
@@ -147,7 +159,8 @@ const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: 
             </Box>
           </Box>
         </Box>
-      ))}
+        );
+      })}
       {filtered.length > visible && (
         <Box sx={{ textAlign: 'center', mt: 2 }}>
           <Button size="small" variant="outlined" onClick={() => setVisible((v) => v + STANDINGS_PAGE)}>
@@ -169,6 +182,7 @@ function BracketMachine() {
   const [predicted, setPredicted] = useState<GameWinner[]>([]);
   const [standingsOpen, setStandingsOpen] = useState(false);
   const [fillAnchor, setFillAnchor] = useState<HTMLElement | null>(null);
+  const [startUser, setStartUser] = useState<string | null>(null);
 
   const regions = useMemo(() => getBracketRegions(), []);
 
@@ -253,6 +267,45 @@ function BracketMachine() {
       .sort((a, b) => a.rank - b.rank || a.fullName.localeCompare(b.fullName));
   }, [bracketData, gameWinners, predicted, userNameMapping]);
 
+  const chooseStartingBracket = (username: string | null) => {
+    setStartUser(username);
+    if (!bracketData || !username) {
+      setPredicted([]);
+      return;
+    }
+    const picks: GameWinner[] = [];
+    for (const gameId of ALL_GAME_IDS) {
+      if (actualByGame.has(gameId)) continue;
+      const pick = bracketData.games[gameId]?.picks[username];
+      if (!pick) continue;
+      const teams = getGameTeamsConsistent(gameId, bracketData, gameResults, gameWinners, picks);
+      if (teams.includes(pick)) picks.push({ gameId, winner: pick });
+    }
+    setPredicted(picks);
+  };
+
+  const startRow = startUser ? rows.find((r) => r.username === startUser) : undefined;
+
+  const rootFor = useMemo(() => {
+    if (!bracketData || !startUser) return [];
+    const rankOf = (picks: GameWinner[]) => {
+      const scores = calculateHypotheticalScores(bracketData, gameWinners, picks);
+      const mine = scores.find((s) => s.username === startUser)?.score ?? 0;
+      return 1 + scores.filter((s) => s.score > mine).length;
+    };
+    const teamsOf = (gid: string, pending: GameWinner[]) => getGameTeamsConsistent(gid, bracketData, gameResults, gameWinners, pending);
+    return ALL_GAME_IDS.filter((gid) => !actualByGame.has(gid))
+      .map((gid) => ({ gid, teams: getGameTeamsConsistent(gid, bracketData, gameResults, gameWinners, []) }))
+      .filter(({ teams }) => teams.length === 2 && !teams.includes('TBD'))
+      .map(({ gid, teams }) => {
+        const outcomes = teams.map((team) => ({ team, rank: rankOf(mergePredictedWinner(gid, team, predicted, teamsOf)) }));
+        return { gid, outcomes, swing: Math.abs(outcomes[0].rank - outcomes[1].rank) };
+      })
+      .filter((g) => g.swing > 0)
+      .sort((a, b) => b.swing - a.swing)
+      .slice(0, ROOT_FOR_LIMIT);
+  }, [bracketData, startUser, gameWinners, gameResults, actualByGame, predicted]);
+
   if (loading || error || !bracketData) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -311,6 +364,76 @@ function BracketMachine() {
     </Box>
   );
 
+  const startingSelector = (
+    <Box>
+      <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: tokens.body, mb: 0.75 }}>Starting bracket</Typography>
+      <Autocomplete
+        size="small"
+        options={rows}
+        value={startRow ?? null}
+        onChange={(_, v) => chooseStartingBracket(v?.username ?? null)}
+        getOptionLabel={(o) => o.fullName}
+        isOptionEqualToValue={(o, v) => o.username === v.username}
+        filterOptions={(opts, { inputValue }) => {
+          const q = inputValue.trim().toLowerCase();
+          return (q ? opts.filter((o) => [o.username, o.fullName, o.bracketName].some((v) => v.toLowerCase().includes(q))) : opts).slice(0, 50);
+        }}
+        renderOption={(props, o) => (
+          <Box component="li" {...props} key={o.username}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography noWrap sx={{ fontSize: '0.875rem' }}>{o.fullName}</Typography>
+              <Typography noWrap sx={{ fontSize: '0.75rem', color: tokens.muted }}>{o.bracketName}</Typography>
+            </Box>
+          </Box>
+        )}
+        renderInput={(p) => <TextField {...p} placeholder="Choose a bracket" />}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5, bgcolor: '#fff' } }}
+      />
+      {!startRow && (
+        <Typography sx={{ fontSize: '0.75rem', color: tokens.muted, mt: 0.75 }}>
+          Start from someone’s picks, then change the games still to play.
+        </Typography>
+      )}
+    </Box>
+  );
+
+  const firstName = startRow?.fullName.split(' ')[0] ?? '';
+  const startingPanel = startRow && (
+    <Box sx={{ mt: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 1, rowGap: 0.25, p: 1.5, borderRadius: 2.5, bgcolor: tokens.primarySoft }}>
+        <Typography sx={{ fontSize: '0.85rem', color: tokens.body }}>
+          Current rank <Box component="span" sx={{ fontWeight: 700, color: tokens.ink }}>#{startRow.rank + startRow.rankChange}</Box>
+        </Typography>
+        <Typography sx={{ color: tokens.muted }}>→</Typography>
+        <Typography sx={{ fontSize: '0.85rem', color: tokens.body }}>
+          potential rank <Box component="span" sx={{ fontWeight: 800, color: tokens.primaryDark, fontSize: '1rem' }}>#{startRow.rank}</Box>
+        </Typography>
+      </Box>
+      {rootFor.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 0.25 }}>Root for</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: tokens.muted, mb: 1 }}>Upcoming games that move {firstName} the most in this scenario.</Typography>
+          {rootFor.map((g) => {
+            const [better, worse] = [...g.outcomes].sort((a, b) => a.rank - b.rank);
+            const verb = (rank: number) => (rank < startRow.rank ? 'moves to' : rank > startRow.rank ? 'falls to' : 'stays at');
+            return (
+              <Box key={g.gid} sx={{ py: 1, borderTop: `1px solid ${tokens.divider}`, fontSize: '0.825rem', lineHeight: 1.5 }}>
+                <Box>
+                  If <Box component="span" sx={{ fontWeight: 700, color: tokens.up }}>{better.team}</Box> wins, {firstName} {verb(better.rank)}{' '}
+                  <Box component="span" sx={{ fontWeight: 700 }}>#{better.rank}</Box>.
+                </Box>
+                <Box sx={{ color: tokens.muted }}>
+                  If <Box component="span" sx={{ fontWeight: 700, color: tokens.down }}>{worse.team}</Box> wins, {firstName} {verb(worse.rank)}{' '}
+                  <Box component="span" sx={{ fontWeight: 700 }}>#{worse.rank}</Box>.
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box
       sx={{
@@ -335,7 +458,7 @@ function BracketMachine() {
             >
               Auto-fill
             </Button>
-            <Button size="small" disabled={!picksMade} onClick={() => setPredicted([])}>
+            <Button size="small" disabled={!picksMade && !startUser} onClick={() => chooseStartingBracket(null)}>
               Reset
             </Button>
           </Box>
@@ -404,6 +527,8 @@ function BracketMachine() {
         </Box>
         </Box>
 
+        <Box sx={{ display: { xs: 'block', lg: 'none' }, maxWidth: 420, mb: 3 }}>{startingSelector}</Box>
+
         <Typography component="h2" sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 800, letterSpacing: '-0.02em' }}>
           {tab === 'FULL' ? 'Full bracket' : tab === 'FINAL_FOUR' ? 'Final Four' : `${tabLabel} Region`}
         </Typography>
@@ -437,7 +562,7 @@ function BracketMachine() {
         <Box sx={{ display: 'flex', gap: 2.5, mt: 2, color: tokens.muted, fontSize: '0.8rem', flexWrap: 'wrap' }}>
           {[
             { color: tokens.success, label: 'Actual result' },
-            { color: tokens.primary, label: 'Your pick' },
+            { color: tokens.primary, label: startRow ? `${firstName}’s pick or yours` : 'Your pick' },
           ].map((l) => (
             <Box key={l.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: l.color }} />
@@ -464,9 +589,13 @@ function BracketMachine() {
         }}
       >
         <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', mb: 2 }}>Your scenario</Typography>
+        <Box sx={{ pb: 2, mb: 2, borderBottom: `1px solid ${tokens.border}` }}>
+          {startingSelector}
+          {startingPanel}
+        </Box>
         <Box sx={{ pb: 2, mb: 2, borderBottom: `1px solid ${tokens.border}` }}>{summary}</Box>
         <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 1.5 }}>Scenario standings</Typography>
-        <ScenarioStandings rows={rows} hasPicks={picksMade > 0} />
+        <ScenarioStandings rows={rows} hasPicks={picksMade > 0} highlight={startUser} />
       </Box>
 
       {/* Mobile scenario bar */}
@@ -492,10 +621,19 @@ function BracketMachine() {
       >
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+            {startRow ? (
+              <>
+                {firstName}: #{startRow.rank + startRow.rankChange} → #{startRow.rank}
+                {rootFor.length > 0 && <Box component="span" sx={{ opacity: 0.6, ml: 0.75 }}>· Root for {rootFor[0].outcomes.reduce((a, b) => (a.rank <= b.rank ? a : b)).team}</Box>}
+              </>
+            ) : (
+            <>
             {picksMade} {picksMade === 1 ? 'pick' : 'picks'}
             <Box component="span" sx={{ opacity: 0.6, mx: 0.75 }}>·</Box>
             {picksMade ? 'Projected leader' : 'Leader'}: {leader?.fullName ?? '—'}
             {tiedLeaders > 1 ? ` +${tiedLeaders - 1}` : ''}
+            </>
+            )}
           </Typography>
         </Box>
         <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#9cc0f5', whiteSpace: 'nowrap' }}>View standings ↑</Typography>
@@ -508,9 +646,10 @@ function BracketMachine() {
         PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '85vh', px: 2, pb: 'calc(16px + env(safe-area-inset-bottom))' } }}
       >
         <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: tokens.border, mx: 'auto', mt: 1.25, mb: 2 }} />
+        {startingPanel && <Box sx={{ pb: 2, mb: 2, mt: -1.5, borderBottom: `1px solid ${tokens.border}` }}>{startingPanel}</Box>}
         <Box sx={{ pb: 2, mb: 2, borderBottom: `1px solid ${tokens.border}` }}>{summary}</Box>
         <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', mb: 1.5 }}>Scenario standings</Typography>
-        <ScenarioStandings rows={rows} hasPicks={picksMade > 0} />
+        <ScenarioStandings rows={rows} hasPicks={picksMade > 0} highlight={startUser} />
       </Drawer>
 
       <Menu anchorEl={fillAnchor} open={!!fillAnchor} onClose={() => setFillAnchor(null)} PaperProps={{ variant: 'outlined', sx: { mt: 0.5 } }}>

@@ -139,6 +139,8 @@ const TeamPage = () => {
   const chartValues = CONFIDENCE_KEYS.map((k) => (mode === 'pct' ? confidence[k] : confidence[`${k}_count`]) ?? 0);
   const compareValue = (t: (typeof comparison)[number]) => (mode === 'pct' ? t.championship : t.championship_count);
   const compareMax = Math.max(...comparison.map(compareValue), 1);
+  const isContender = comparison.findIndex((t) => t.team === team) < COMPARISON_COUNT;
+  const showComparison = isContender || confidence.championship_count > 0;
 
   const status = (() => {
     if (champion) return { lead: 'National', accent: 'Champion' };
@@ -257,8 +259,17 @@ const TeamPage = () => {
         </Box>
       </Box>
 
-      {/* Comparison */}
-      <Box sx={{ py: 4, borderBottom: `1px solid ${tokens.border}` }}>
+      {/* Contenders lead with the championship comparison; long shots lead with how far brackets took them. */}
+      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      {showComparison && (
+      <Box
+        sx={{
+          py: 4,
+          order: isContender ? 0 : 1,
+          borderTop: isContender ? 'none' : `1px solid ${tokens.border}`,
+          borderBottom: isContender ? `1px solid ${tokens.border}` : 'none',
+        }}
+      >
         <SectionHeading
           action={
             <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 2, fontSize: '0.8rem', color: tokens.muted }}>
@@ -294,9 +305,9 @@ const TeamPage = () => {
           })}
         </Box>
       </Box>
+      )}
 
-      {/* Depth buckets */}
-      <Box sx={{ pt: 4 }}>
+      <Box sx={{ pt: 4, pb: isContender ? 0 : 4, order: isContender ? 1 : 0 }}>
         <SectionHeading>Where brackets took {team}</SectionHeading>
         <Typography sx={{ fontSize: '0.8rem', color: tokens.muted, mt: -1.5, mb: 2.5 }}>
           Every bracket, grouped by the furthest round it had {team} going.
@@ -349,6 +360,7 @@ const TeamPage = () => {
             );
           })}
         </Box>
+      </Box>
       </Box>
     </Box>
   );
