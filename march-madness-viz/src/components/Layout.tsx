@@ -165,7 +165,7 @@ const Layout = ({ children, year }: { children: ReactNode; year: string }) => {
   const overviewItem: NavItem = {
     name: 'Overview',
     path: getYearPath(year, '/'),
-    match: (p) => p === '/' || isStandingsPath(p),
+    match: (p) => p === '/' || p.startsWith('/leaderboard'),
   };
   const leaderboardItem: NavItem = { name: 'Leaderboard', path: getYearPath(year, '/leaderboard'), match: isStandingsPath };
 

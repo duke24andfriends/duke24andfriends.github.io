@@ -13,6 +13,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useData } from '../context/DataContext';
 import { useYearPath } from '../utils/yearRouting';
 import { getMostRecentRound } from '../utils/mostRecentRound';
@@ -143,7 +144,8 @@ const Home = () => {
               <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                 {lookback === 1 ? 'Last Game' : `Last ${lookback}`}
               </TableCell>
-              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, pr: 0 }}>Trend</TableCell>
+              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Trend</TableCell>
+              <TableCell sx={{ width: 20, p: 0 }} />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -152,7 +154,7 @@ const Home = () => {
                 key={s.username}
                 hover
                 onClick={() => navigate(userPath(s))}
-                sx={{ cursor: 'pointer', '& td': { py: { xs: 1.25, md: 1.4 } } }}
+                sx={{ cursor: 'pointer', '& td': { py: { xs: 1.25, md: 1.4 } }, '&:hover .row-chevron': { color: tokens.primary, transform: 'translateX(2px)' } }}
               >
                 <TableCell sx={{ color: tokens.body }}>{s.rank}</TableCell>
                 <TableCell>
@@ -178,8 +180,11 @@ const Home = () => {
                 <TableCell align="right">
                   <ChangeIndicator value={s.delta} />
                 </TableCell>
-                <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, pr: 0, lineHeight: 0 }}>
+                <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, lineHeight: 0 }}>
                   <Sparkline values={s.history.slice(-SPARKLINE_POINTS)} />
+                </TableCell>
+                <TableCell sx={{ width: 20, p: 0, lineHeight: 0 }}>
+                  <ChevronRightIcon className="row-chevron" sx={{ fontSize: 18, color: tokens.subtle, transition: 'transform 120ms, color 120ms' }} />
                 </TableCell>
               </TableRow>
             ))}
@@ -217,12 +222,12 @@ const Home = () => {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, auto)', lg: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(4, auto)' },
+              gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, auto)', lg: 'repeat(2, minmax(0, 1fr))' },
               justifyContent: 'start',
               rowGap: 2,
               pb: 3,
               borderBottom: `1px solid ${tokens.border}`,
-              '& > :nth-of-type(odd)': { pl: { xs: 0, sm: 2, lg: 0, xl: 2 }, borderLeft: { xs: 'none', sm: `1px solid ${tokens.border}`, lg: 'none', xl: `1px solid ${tokens.border}` } },
+              '& > :nth-of-type(odd)': { pl: { xs: 0, sm: 2, lg: 0 }, borderLeft: { xs: 'none', sm: `1px solid ${tokens.border}`, lg: 'none' } },
               '& > :first-of-type': { pl: 0, borderLeft: 'none' },
             }}
           >

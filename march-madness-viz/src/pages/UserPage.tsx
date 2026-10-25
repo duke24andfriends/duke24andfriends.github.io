@@ -1,5 +1,5 @@
 import { useMemo, useState, ReactNode } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useData } from '../context/DataContext';
 import { useYearPath } from '../utils/yearRouting';
 import { getPointsForGame, getRoundNameFromGameId } from '../types';
@@ -23,6 +24,7 @@ import { ROUND_LABELS, ROUND_ORDER, RoundKey, usePoolStandings } from '../hooks/
 import { getRoundPageMatchupSlots, formatMatchupSlotLabel } from '../utils/bracketLogic';
 import { computeStrategyMetrics, strategyPercentiles } from '../utils/pickStrategy';
 import { SectionHeading } from '../components/ui/PageTitle';
+import Breadcrumbs from '../components/ui/Breadcrumbs';
 import Meter from '../components/ui/Meter';
 import { tokens } from '../theme';
 
@@ -78,6 +80,7 @@ const StrategyCard = ({ title, value, left, right, caption }: { title: string; v
 const UserPage = () => {
   const { username = '' } = useParams();
   const { yearPath } = useYearPath();
+  const navigate = useNavigate();
   const { bracketData, gameWinners, gameResults, loading, error } = useData();
   const { standings } = usePoolStandings(1);
   const [roundFilter, setRoundFilter] = useState<RoundKey | 'ALL'>('ALL');
@@ -235,6 +238,7 @@ const UserPage = () => {
 
   return (
     <Box>
+      <Breadcrumbs crumbs={[{ label: 'Leaderboard', to: yearPath('/leaderboard') }, { label: me.fullName }]} />
       {/* Identity + accuracy by round */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 7fr) minmax(0, 5fr)' }, columnGap: 6, rowGap: 4, pb: 4, borderBottom: `1px solid ${tokens.border}` }}>
         <Box>
@@ -351,26 +355,31 @@ const UserPage = () => {
                     <TableCell align="right">Score</TableCell>
                     <TableCell align="right">Accuracy</TableCell>
                     <TableCell align="right">Similarity</TableCell>
+                    <TableCell sx={{ width: 28, px: 0 }} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {similarRows.map((s) => {
                     const a = accuracyOf.get(s.username);
                     return (
-                      <TableRow key={s.username} sx={{ bgcolor: s.self ? tokens.primarySoft : undefined }}>
+                      <TableRow
+                        key={s.username}
+                        hover={!s.self}
+                        onClick={s.self ? undefined : () => navigate(yearPath(`/users/${encodeURIComponent(s.username)}`))}
+                        sx={{ bgcolor: s.self ? tokens.primarySoft : undefined, cursor: s.self ? 'default' : 'pointer', '&:hover .row-chevron': { color: tokens.primary } }}
+                      >
                         <TableCell sx={{ color: tokens.body }}>#{s.standing?.rank ?? '–'}</TableCell>
                         <TableCell sx={{ maxWidth: 180 }}>
-                          {s.self ? (
-                            <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.875rem', color: tokens.primary }}>{me.fullName} (this bracket)</Typography>
-                          ) : (
-                            <Link component={RouterLink} to={yearPath(`/users/${encodeURIComponent(s.username)}`)} underline="hover" noWrap sx={{ display: 'block', fontSize: '0.875rem' }}>
-                              {s.standing?.fullName ?? s.username}
-                            </Link>
-                          )}
+                          <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: s.self ? 700 : 500, color: tokens.primary }}>
+                            {s.self ? `${me.fullName} (this bracket)` : s.standing?.fullName ?? s.username}
+                          </Typography>
                         </TableCell>
                         <TableCell align="right">{fmt(s.standing?.score ?? 0)}</TableCell>
                         <TableCell align="right">{a?.total ? pct((a.correct / a.total) * 100) : '—'}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 600 }}>{s.self ? '—' : `${Math.round(s.similarity * 100)}%`}</TableCell>
+                        <TableCell sx={{ width: 28, px: 0, lineHeight: 0 }}>
+                          {!s.self && <ChevronRightIcon className="row-chevron" sx={{ fontSize: 18, color: tokens.subtle }} />}
+                        </TableCell>
                       </TableRow>
                     );
                   })}

@@ -13,11 +13,14 @@ import {
   MenuItem,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useData } from '../context/DataContext';
 import RegionBracket, { BracketColumn } from '../components/bracket/RegionBracket';
+import FullBracket, { RegionLayout } from '../components/bracket/FullBracket';
 import InitialsAvatar from '../components/ui/InitialsAvatar';
 import ChangeIndicator from '../components/ui/ChangeIndicator';
 import {
@@ -32,11 +35,12 @@ import { displayNames } from '../hooks/usePoolStandings';
 import { MOBILE_NAV_HEIGHT, tokens } from '../theme';
 
 type RegionKey = 'SOUTH' | 'EAST' | 'WEST' | 'MIDWEST';
-type TabKey = RegionKey | 'FINAL_FOUR';
+type TabKey = 'FULL' | RegionKey | 'FINAL_FOUR';
 type FillStrategy = 'favorites' | 'popular' | 'random';
 
 /** Data keys don't match the displayed region names for this year's bracket. */
 const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'FULL', label: 'Full bracket' },
   { key: 'SOUTH', label: 'East' },
   { key: 'EAST', label: 'West' },
   { key: 'WEST', label: 'South' },
@@ -160,7 +164,8 @@ const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: 
 
 function BracketMachine() {
   const { bracketData, gameWinners, gameResults, userNameMapping, loading, error } = useData();
-  const [tab, setTab] = useState<TabKey>('SOUTH');
+  const isDesktop = useMediaQuery(useTheme().breakpoints.up('md'), { noSsr: true });
+  const [tab, setTab] = useState<TabKey>(isDesktop ? 'FULL' : 'SOUTH');
   const [predicted, setPredicted] = useState<GameWinner[]>([]);
   const [standingsOpen, setStandingsOpen] = useState(false);
   const [fillAnchor, setFillAnchor] = useState<HTMLElement | null>(null);
@@ -257,12 +262,26 @@ function BracketMachine() {
   }
 
   const columns: BracketColumn[] =
-    tab === 'FINAL_FOUR'
-      ? [
-          { ...ROUND_META.finalFour, gameIds: regions.FINAL_FOUR.games },
-          { ...ROUND_META.championship, gameIds: regions.FINAL_FOUR.championship },
-        ]
-      : (['round64', 'round32', 'sweet16', 'elite8'] as const).map((k) => ({ ...ROUND_META[k], gameIds: regions[tab][k] }));
+    tab === 'FULL'
+      ? []
+      : tab === 'FINAL_FOUR'
+        ? [
+            { ...ROUND_META.finalFour, gameIds: regions.FINAL_FOUR.games },
+            { ...ROUND_META.championship, gameIds: regions.FINAL_FOUR.championship },
+          ]
+        : (['round64', 'round32', 'sweet16', 'elite8'] as const).map((k) => ({ ...ROUND_META[k], gameIds: regions[tab][k] }));
+  const regionLayout = (key: RegionKey): RegionLayout => ({
+    key,
+    label: TABS.find((t) => t.key === key)!.label,
+    rounds: [regions[key].round64, regions[key].round32, regions[key].sweet16, regions[key].elite8],
+  });
+  const bracketProps = {
+    getTeams: (id: string) => teamsFor(id),
+    getSeed: (team: string) => seedByTeam[team],
+    getActualWinner: (id: string) => actualByGame.get(id) ?? '',
+    getPredictedWinner: (id: string) => predictedByGame.get(id) ?? '',
+    onPick: handlePick,
+  };
 
   const tabLabel = TABS.find((t) => t.key === tab)!.label;
   const remaining = ALL_GAME_IDS.filter((g) => !actualByGame.has(g)).length;
@@ -296,8 +315,8 @@ function BracketMachine() {
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 360px' },
-        columnGap: { lg: 5 },
+        gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 320px', xl: 'minmax(0, 1fr) 360px' },
+        columnGap: { lg: 4, xl: 5 },
         alignItems: 'start',
       }}
     >
@@ -333,7 +352,7 @@ function BracketMachine() {
             scrollbarWidth: 'none',
             '&::-webkit-scrollbar': { display: 'none' },
             mb: 3,
-            maxWidth: 720,
+            maxWidth: 820,
           }}
         >
           {TABS.map((t) => {
@@ -363,23 +382,27 @@ function BracketMachine() {
         </Box>
 
         <Typography component="h2" sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 800, letterSpacing: '-0.02em' }}>
-          {tab === 'FINAL_FOUR' ? 'Final Four' : `${tabLabel} Region`}
+          {tab === 'FULL' ? 'Full bracket' : tab === 'FINAL_FOUR' ? 'Final Four' : `${tabLabel} Region`}
         </Typography>
         <Typography sx={{ color: tokens.muted, mb: 3 }}>
           {tournamentOver
             ? 'Every game has been played. Green shows the actual winners.'
-            : 'Tap a team to pick a winner. See how it changes the standings.'}
+            : tab === 'FULL'
+              ? 'Click a team to pick a winner, or open a region to work through it up close.'
+              : 'Tap a team to pick a winner. See how it changes the standings.'}
         </Typography>
 
-        <RegionBracket
-          columns={columns}
-          getTeams={(id) => teamsFor(id)}
-          getSeed={(team) => seedByTeam[team]}
-          getActualWinner={(id) => actualByGame.get(id) ?? ''}
-          getPredictedWinner={(id) => predictedByGame.get(id) ?? ''}
-          onPick={handlePick}
-          championGameId={tab === 'FINAL_FOUR' ? '63' : undefined}
-        />
+        {tab === 'FULL' ? (
+          <FullBracket
+            regions={[regionLayout('SOUTH'), regionLayout('WEST'), regionLayout('EAST'), regionLayout('MIDWEST')]}
+            semis={['61', '62']}
+            championshipId="63"
+            onRegionSelect={(key) => setTab(key as RegionKey)}
+            {...bracketProps}
+          />
+        ) : (
+          <RegionBracket columns={columns} championGameId={tab === 'FINAL_FOUR' ? '63' : undefined} {...bracketProps} />
+        )}
 
         <Box sx={{ display: 'flex', gap: 2.5, mt: 2, color: tokens.muted, fontSize: '0.8rem', flexWrap: 'wrap' }}>
           {[

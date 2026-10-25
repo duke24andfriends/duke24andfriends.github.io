@@ -1,856 +1,580 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useMemo, useState, ReactNode } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Box,
-  Typography,
-  Card,
-  CardHeader,
-  CardContent,
-  Grid,
-  CircularProgress,
-  Tabs,
-  Tab,
-  Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  TextField,
-  Slider,
-  Stack,
-  Paper,
-  Tooltip,
-  Divider,
   Autocomplete,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  Box,
+  Button,
+  ButtonBase,
+  CircularProgress,
+  Collapse,
+  InputAdornment,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TableSortLabel,
+  Tabs,
+  TextField,
+  Typography,
 } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { useLocation } from 'react-router-dom';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { useData } from '../context/DataContext';
+import { useYearPath } from '../utils/yearRouting';
+import { getRoundNameFromGameId } from '../types';
+import { RoundKey, Standing, usePoolStandings } from '../hooks/usePoolStandings';
+import { computeStrategyMetrics, StrategyMetrics } from '../utils/pickStrategy';
 import PageTitle from '../components/ui/PageTitle';
-import { Scatter } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip as ChartTooltip,
-  Legend
-} from 'chart.js';
-import UserSimilarityTable, { UserSimilarity } from '../components/UserSimilarityTable';
-import PickStrategyTable, {
-  PickStrategyTableRow
-} from '../components/pool/PickStrategyTable';
+import SegmentedControl from '../components/ui/SegmentedControl';
+import InitialsAvatar from '../components/ui/InitialsAvatar';
+import { tokens } from '../theme';
 
-// Register Chart.js components
-ChartJS.register(
-  LinearScale,
-  PointElement,
-  LineElement,
-  ChartTooltip,
-  Legend
-);
+type TabKey = 'strategy' | 'similarity';
+type Metric = 'chalk' | 'herding' | 'contrarian';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
+const PAGE_SIZE = 25;
+const SPECTRUM_STEPS = 12;
+const ROUND_WEIGHTS: Record<RoundKey, number> = {
+  ROUND_64: 10,
+  ROUND_32: 20,
+  SWEET_16: 40,
+  ELITE_8: 80,
+  FINAL_FOUR: 160,
+  CHAMPIONSHIP: 320,
+};
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`analysis-tabpanel-${index}`}
-      aria-labelledby={`analysis-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ py: { xs: 1.5, sm: 3 } }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
-
-interface UserPickStrategy {
-  username: string;
-  chalkScore: number;  // Based on seed (lower seed = more chalk)
-  herdingScore: number; // Based on popular picks (higher = more herding)
-  deviationScore: number; // How much they deviate from consensus (higher = more contrarian)
-  score: number;
-}
-
-interface UserCluster {
-  id: number;
-  users: string[];
-  centroid: number[];
-}
-
-const PoolAnalysisPage = () => {
-  const { 
-    bracketData, 
-    gameWinners, 
-    gameResults,
-    userScores, 
-    loading, 
-    error 
-  } = useData();
-  
-  const location = useLocation();
-  const [tabValue, setTabValue] = useState(0);
-  const [selectedUser, setSelectedUser] = useState<string>('');
-  const [clusterCount, setClusterCount] = useState<number>(3);
-
-  const getDisplayName = (username: string) => {
-    const userData = userScores.find(user => user.username === username);
-    return userData?.fullName || username;
-  };
-  
-  // Check for user parameter in URL
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const userParam = params.get('user');
-    if (userParam && userScores.some(user => user.username === userParam)) {
-      setSelectedUser(userParam);
-    }
-  }, [location.search, userScores]);
-  
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-  
-  // Calculate user similarity
-  const userSimilarities = useMemo(() => {
-    if (!bracketData || !selectedUser) return [];
-    
-    const userPicks = new Map<string, Set<string>>();
-    const userPicksWithWeights = new Map<string, Map<string, number>>();
-    
-    // Round weights for scoring
-    const roundWeights: Record<string, number> = {
-      'ROUND_64': 10,
-      'ROUND_32': 20,
-      'SWEET_16': 40,
-      'ELITE_8': 80,
-      'FINAL_FOUR': 160,
-      'CHAMPIONSHIP': 320
-    };
-    
-    // Function to get round name from game ID
-    const getRoundNameFromGameId = (gameId: string): string => {
-      const id = parseInt(gameId);
-      if (id >= 1 && id <= 32) return 'ROUND_64';
-      if (id >= 33 && id <= 48) return 'ROUND_32';
-      if (id >= 49 && id <= 56) return 'SWEET_16';
-      if (id >= 57 && id <= 60) return 'ELITE_8';
-      if (id >= 61 && id <= 62) return 'FINAL_FOUR';
-      return 'CHAMPIONSHIP';
-    };
-    
-    // Collect all picks for each user
-    Object.entries(bracketData.games).forEach(([gameId, game]) => {
-      // Get the round weight for this game
-      const roundName = getRoundNameFromGameId(gameId);
-      const weight = roundWeights[roundName];
-      
-      Object.entries(game.picks).forEach(([username, pick]) => {
-        // Regular similarity - just the picks
-        if (!userPicks.has(username)) {
-          userPicks.set(username, new Set());
-        }
-        userPicks.get(username)?.add(`${gameId}:${pick}`);
-        
-        // Weighted similarity - with round weights
-        if (!userPicksWithWeights.has(username)) {
-          userPicksWithWeights.set(username, new Map());
-        }
-        userPicksWithWeights.get(username)?.set(`${gameId}:${pick}`, weight);
-      });
-    });
-    
-    // Calculate Jaccard similarity between selected user and all others
-    const selectedUserPicks = userPicks.get(selectedUser);
-    const selectedUserWeightedPicks = userPicksWithWeights.get(selectedUser);
-    
-    if (!selectedUserPicks || !selectedUserWeightedPicks) return [];
-    
-    const similarities: UserSimilarity[] = [];
-    
-    userPicks.forEach((picks, username) => {
-      if (username === selectedUser) return;
-      
-      // Calculate regular similarity (Jaccard index)
-      const intersection = new Set(
-        Array.from(selectedUserPicks).filter(pick => picks.has(pick))
-      );
-      
-      const union = new Set([...selectedUserPicks, ...picks]);
-      
-      // Jaccard similarity: size of intersection / size of union
-      const similarity = intersection.size / union.size;
-      
-      // Calculate weighted similarity
-      const userWeightedPicks = userPicksWithWeights.get(username);
-      if (!userWeightedPicks) return;
-      
-      let weightedIntersectionSum = 0;
-      let weightedUnionSum = 0;
-      let sharedPoints = 0;
-      
-      // Get all unique picks between both users
-      const allPickKeys = new Set([
-        ...Array.from(selectedUserWeightedPicks.keys()),
-        ...Array.from(userWeightedPicks.keys())
-      ]);
-      
-      // Calculate weighted sums
-      allPickKeys.forEach(pickKey => {
-        const selectedUserWeight = selectedUserWeightedPicks.get(pickKey) || 0;
-        const otherUserWeight = userWeightedPicks.get(pickKey) || 0;
-        
-        // For intersection, take the minimum weight (only if both users picked it)
-        if (selectedUserWeight > 0 && otherUserWeight > 0) {
-          weightedIntersectionSum += Math.min(selectedUserWeight, otherUserWeight);
-          
-          // If both users picked the same team for this game, add the points to sharedPoints
-          sharedPoints += selectedUserWeight;
-        }
-        
-        // For union, take the maximum weight
-        weightedUnionSum += Math.max(selectedUserWeight, otherUserWeight);
-      });
-      
-      // Weighted Jaccard similarity
-      const weightedSimilarity = weightedUnionSum > 0 ? 
-        weightedIntersectionSum / weightedUnionSum : 0;
-      
-      const userScore = userScores.find(score => score.username === username)?.score || 0;
-      
-      similarities.push({
-        username,
-        similarity,
-        weightedSimilarity,
-        sharedPoints,
-        score: userScore
-      });
-    });
-    
-    return similarities.sort((a, b) => b.weightedSimilarity - a.weightedSimilarity);
-  }, [bracketData, selectedUser, userScores]);
-  
-  // State for managing sorting
-  const [sortConfig, setSortConfig] = useState<{
-    key: 'similarity' | 'weightedSimilarity' | 'sharedPoints' | 'score';
-    direction: 'ascending' | 'descending';
-  }>({
-    key: 'weightedSimilarity',
-    direction: 'descending'
-  });
-
-  // Function to handle sorting
-  const requestSort = (key: 'similarity' | 'weightedSimilarity' | 'sharedPoints' | 'score') => {
-    let direction: 'ascending' | 'descending' = 'descending';
-    if (sortConfig.key === key && sortConfig.direction === 'descending') {
-      direction = 'ascending';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  // Get sorted data
-  const sortedSimilarities = useMemo(() => {
-    if (!userSimilarities.length) return [];
-    const sortableItems = [...userSimilarities];
-    
-    sortableItems.sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (a[sortConfig.key] > b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
-    });
-    
-    return sortableItems;
-  }, [userSimilarities, sortConfig]);
-  
-  // Calculate user chalk and herding scores
-  const userPickStrategies = useMemo(() => {
-    if (!bracketData || !gameResults) return [];
-    
-    const userStats: Record<string, { 
-      chalkPicks: number, 
-      totalPicks: number,
-      herdingScore: number,
-      deviationScore: number,
-      // Track picks for clustering
-      picksVector: Record<string, number>
-    }> = {};
-    
-    // Get all usernames
-    const usernames = new Set<string>();
-    Object.values(bracketData.games).forEach(game => {
-      Object.keys(game.picks).forEach(username => usernames.add(username));
-    });
-    
-    // Initialize user stats
-    usernames.forEach(username => {
-      userStats[username] = { 
-        chalkPicks: 0, 
-        totalPicks: 0,
-        herdingScore: 0,
-        deviationScore: 0,
-        picksVector: {}
-      };
-    });
-    
-    // Create a seed map for calculating chalk score
-    const seedMap = new Map<string, number>();
-    gameResults.forEach(result => {
-      seedMap.set(result.winner, result.winnerSeed);
-      seedMap.set(result.loser, result.loserSeed);
-    });
-    
-    // For each game, analyze pick strategies
-    Object.entries(bracketData.games).forEach(([gameId, game]) => {
-      const teamPicks: Record<string, number> = {};
-      
-      // Count picks for each team
-      Object.values(game.picks).forEach(pick => {
-        teamPicks[pick] = (teamPicks[pick] || 0) + 1;
-      });
-      
-      // Find chalk pick (team with lowest seed) and most popular pick
-      let chalkPick = '';
-      let lowestSeed = Number.MAX_SAFE_INTEGER;
-      
-      let mostPopularPick = '';
-      let maxPicks = 0;
-      
-      // Find both chalk (lowest seed) and popular (most picked) teams
-      Object.keys(teamPicks).forEach(team => {
-        const seed = seedMap.get(team);
-        const pickCount = teamPicks[team];
-        
-        // Update chalk pick (lowest seed)
-        if (seed !== undefined && seed < lowestSeed) {
-          lowestSeed = seed;
-          chalkPick = team;
-        }
-        
-        // Update most popular pick
-        if (pickCount > maxPicks) {
-          maxPicks = pickCount;
-          mostPopularPick = team;
-        }
-      });
-      
-      // Calculate how much each user's strategy matches chalk vs consensus
-      Object.entries(game.picks).forEach(([username, pick]) => {
-        userStats[username].totalPicks++;
-        
-        // Store pick for clustering vector (1 for picked team, 0 for others)
-        Object.keys(teamPicks).forEach(team => {
-          const pickKey = `${gameId}:${team}`;
-          userStats[username].picksVector[pickKey] = team === pick ? 1 : 0;
-        });
-        
-        // Calculate chalk score (did they pick the lowest seed)
-        if (pick === chalkPick) {
-          userStats[username].chalkPicks++;
-        }
-        
-        // Calculate herding score (did they pick the most popular team)
-        if (pick === mostPopularPick) {
-          userStats[username].herdingScore++;
-        } else {
-          // Calculate deviation based on how unpopular the pick was
-          const pickCount = teamPicks[pick] || 0;
-          const deviation = 1 - (pickCount / maxPicks);
-          userStats[username].deviationScore += deviation;
-        }
-      });
-    });
-    
-    // Convert to array with percentages
-    return Array.from(usernames).map(username => {
-      const stats = userStats[username];
-      const chalkScore = (stats.chalkPicks / stats.totalPicks) * 100;
-      const herdingScore = (stats.herdingScore / stats.totalPicks) * 100;
-      const userScore = userScores.find(score => score.username === username)?.score || 0;
-      
-      return {
-        username,
-        chalkScore,
-        herdingScore,
-        deviationScore: stats.deviationScore,
-        score: userScore,
-        // Keep track of pick vector for clustering
-        picksVector: stats.picksVector
-      };
-    });
-  }, [bracketData, gameResults, userScores]);
-
-  const pickStrategyTableRows: PickStrategyTableRow[] = useMemo(() => {
-    return userPickStrategies.map((u) => {
-      const meta = userScores.find((s) => s.username === u.username);
-      return {
-        username: u.username,
-        chalkScore: u.chalkScore,
-        herdingScore: u.herdingScore,
-        deviationScore: u.deviationScore,
-        score: u.score,
-        fullName: meta?.fullName,
-        bracketName: meta?.bracketName
-      };
-    });
-  }, [userPickStrategies, userScores]);
-  
-  // Perform k-means clustering on user picks for championship game (game 63)
-  const userClusters = useMemo(() => {
-    if (!userPickStrategies.length || !bracketData) return [];
-    
-    // Get all unique championship picks (game 63)
-    const championshipGame = bracketData.games['63'];
-    if (!championshipGame) return [];
-    
-    const championPicks: Record<string, string[]> = {};
-    
-    // Group users by their championship pick
-    Object.entries(championshipGame.picks).forEach(([username, team]) => {
-      if (!championPicks[team]) {
-        championPicks[team] = [];
-      }
-      championPicks[team].push(username);
-    });
-    
-    // Convert to clusters (using sequential IDs)
-    let clusterId = 1;
-    const clusters: UserCluster[] = Object.entries(championPicks)
-      .sort((a, b) => b[1].length - a[1].length) // Sort by popularity
-      .map(([team, users]) => {
-        // Find average chalk and herding score for visualization purposes
-        const usersWithStats = users.map(username => 
-          userPickStrategies.find(u => u.username === username)
-        ).filter(Boolean);
-        
-        const avgChalkScore = usersWithStats.reduce((sum, user) => sum + (user?.chalkScore || 0), 0) / usersWithStats.length;
-        const avgHerdingScore = usersWithStats.reduce((sum, user) => sum + (user?.herdingScore || 0), 0) / usersWithStats.length;
-        
-        return {
-          id: clusterId++,
-          team,
-          users,
-          centroid: [avgChalkScore, avgHerdingScore]
-        };
-    });
-    
-    return clusters;
-  }, [userPickStrategies, bracketData, clusterCount]);
-  
-  // Scatter plot data for user clustering
-  const scatterData = useMemo(() => {
-    if (!userPickStrategies.length || !userClusters.length) return null;
-    
-    // Create scatter datasets for each cluster
-    const datasets = userClusters.map(cluster => {
-      // Get colors based on cluster ID
-      const hue = (cluster.id * 120) % 360;
-      
-      // Get user data for this cluster
-      const userData = cluster.users.map(username => {
-        const user = userPickStrategies.find(u => u.username === username);
-        return {
-          x: user?.chalkScore ?? 0,
-          y: user?.herdingScore ?? 0,
-          username,
-          score: user?.score ?? 0,
-          team: cluster.team
-        };
-      });
-      
-      return {
-        label: `Cluster ${cluster.id}: ${cluster.team} (${cluster.users.length} users)`,
-        data: userData,
-        backgroundColor: `hsla(${hue}, 70%, 50%, 0.6)`,
-        borderColor: `hsla(${hue}, 70%, 50%, 1)`,
-        borderWidth: 1,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      };
-    });
-    
-    return {
-      datasets
-    };
-  }, [userPickStrategies, userClusters]);
-  
-  // Generate cluster descriptions
-  const clusterDescriptions = useMemo(() => {
-    if (!userClusters.length) return [];
-    
-    return userClusters.map(cluster => {
-      const users = cluster.users.map(username => 
-        userPickStrategies.find(u => u.username === username)
-      ).filter(Boolean);
-      
-      // Calculate average scores for this cluster
-      const avgChalkScore = users.reduce((sum, user) => sum + (user?.chalkScore ?? 0), 0) / users.length;
-      const avgHerdingScore = users.reduce((sum, user) => sum + (user?.herdingScore ?? 0), 0) / users.length;
-      const avgScore = users.reduce((sum, user) => sum + (user?.score ?? 0), 0) / users.length;
-      
-      let description = "";
-      
-      if (avgChalkScore > 75) {
-        description = "These users heavily favor chalk picks (lower seeds).";
-      } else if (avgHerdingScore > 75) {
-        description = "These users tend to follow the crowd with popular picks.";
-      } else if (avgChalkScore < 40 && avgHerdingScore < 40) {
-        description = "These users make contrarian picks, avoiding both chalk and popular teams.";
-      } else {
-        description = "These users have a balanced picking strategy.";
-      }
-      
-      return {
-        id: cluster.id,
-        team: cluster.team,
-        size: cluster.users.length,
-        avgScore: avgScore,
-        description: description,
-        topUsers: users.sort((a, b) => (b?.score || 0) - (a?.score || 0)).slice(0, 5)
-      };
-    });
-  }, [userClusters, userPickStrategies]);
-  
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', height: '300px', alignItems: 'center' }}>
-        <CircularProgress size={60} />
-      </Box>
-    );
+const METRICS: Record<
+  Metric,
+  {
+    label: string;
+    title: string;
+    tableTitle: string;
+    column: string;
+    linkTitle: string;
+    linkBody: string;
+    definition: string;
+    low: [string, string];
+    high: [string, string];
+    method: string;
+    value: (m: StrategyMetrics) => number;
+    format: (n: number) => string;
   }
+> = {
+  chalk: {
+    label: 'Chalk',
+    title: 'Chalk score',
+    tableTitle: 'Most chalky brackets',
+    column: 'Chalk score',
+    linkTitle: 'Most chalky brackets',
+    linkBody: 'Brackets that stick with the higher seeds.',
+    definition:
+      'Measures how often a bracket picks the higher-seeded team (favorites). Higher scores indicate a more chalky bracket with fewer upsets.',
+    low: ['More upsets', '(less chalk)'],
+    high: ['More favorites', '(more chalk)'],
+    method:
+      'For every game, we find the best-seeded team anyone in the pool picked. A bracket’s chalk score is the share of its 63 picks that match that team.',
+    value: (m) => m.chalk,
+    format: (n) => `${n.toFixed(1)}%`,
+  },
+  herding: {
+    label: 'Herding',
+    title: 'Herding score',
+    tableTitle: 'Most herding brackets',
+    column: 'Herding score',
+    linkTitle: 'Most herding brackets',
+    linkBody: 'Brackets that make similar picks to the rest of your pool.',
+    definition:
+      'Measures how often a bracket goes with the pool’s most popular pick. Higher scores mean a bracket that follows the crowd.',
+    low: ['More independent', '(fewer crowd picks)'],
+    high: ['Follows the crowd', '(more crowd picks)'],
+    method:
+      'For every game, we find the team the most brackets picked. A bracket’s herding score is the share of its 63 picks that match the pool favorite.',
+    value: (m) => m.herding,
+    format: (n) => `${n.toFixed(1)}%`,
+  },
+  contrarian: {
+    label: 'Contrarian',
+    title: 'Contrarian score',
+    tableTitle: 'Most contrarian brackets',
+    column: 'Contrarian score',
+    linkTitle: 'Most contrarian brackets',
+    linkBody: 'Brackets that make different picks from the rest of your pool.',
+    definition:
+      'Measures how far a bracket strays from the pool consensus, and how unpopular those off-consensus picks were. Higher scores mean bolder brackets.',
+    low: ['With the pool', '(few lone picks)'],
+    high: ['Against the pool', '(many lone picks)'],
+    method:
+      'Each pick that isn’t the pool favorite adds 1 − (brackets on that team ÷ brackets on the favorite). A lone-wolf pick adds nearly 1; a near-tie adds almost nothing.',
+    value: (m) => m.deviation,
+    format: (n) => n.toFixed(1),
+  },
+};
 
-  if (error || !bracketData) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 5, px: 3 }}>
-        <Typography variant="h2" color="error" gutterBottom>
-          Error
-        </Typography>
-        <Typography variant="body1" sx={{ mt: 2, mb: 4 }}>
-          {error || "Failed to load bracket data"}
-        </Typography>
-      </Box>
-    );
-  }
-  
+const fmt = (n: number) => n.toLocaleString();
+
+const median = (values: number[]) => {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+
+const headCellSx = { bgcolor: tokens.surfaceAlt, color: tokens.body, fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap' } as const;
+
+const Disclosure = ({ label, children }: { label: string; children: ReactNode }) => {
+  const [open, setOpen] = useState(false);
   return (
-    <Box>
-      <PageTitle subtitle="Find brackets like yours and see how the pool's pick strategies cluster.">Pool analysis</PageTitle>
-      
-      <Typography variant="body1" paragraph sx={{ mb: { xs: 2, sm: 3 } }}>
-        Analyze pick strategies and bracket similarity.
-      </Typography>
-      
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: { xs: 2, sm: 3 } }}>
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="pool analysis tabs">
-          <Tab label="Pick Strategy" id="analysis-tab-0" aria-controls="analysis-tabpanel-0" />
-          <Tab label="Bracket Similarity" id="analysis-tab-1" aria-controls="analysis-tabpanel-1" />
-        </Tabs>
-      </Box>
-      
-      <TabPanel value={tabValue} index={1}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardHeader title="Find Similar Brackets" />
-              <CardContent>
-                <FormControl fullWidth sx={{ mb: 4 }}>
-                  <Autocomplete
-                    id="user-select"
-                    options={userScores}
-                    getOptionLabel={(option) => {
-                      return option.fullName
-                        ? `${option.fullName} (@${option.username})`
-                        : option.username;
-                    }}
-                    isOptionEqualToValue={(option, value) => option.username === value.username}
-                    value={userScores.find(user => user.username === selectedUser) || null}
-                    onChange={(_, newValue) => setSelectedUser(newValue ? newValue.username : '')}
-                    renderInput={(params) => (
-                      <TextField 
-                        {...params} 
-                        label="Search for a User" 
-                        variant="outlined"
-                        placeholder="Search by username, bracket name, or full name"
-                      />
-                    )}
-                    filterOptions={(options, { inputValue }) => {
-                      const filterValue = inputValue.toLowerCase();
-                      return options.filter(option => 
-                        option.username.toLowerCase().includes(filterValue) ||
-                        (option.bracketName && option.bracketName.toLowerCase().includes(filterValue)) ||
-                        (option.fullName && option.fullName.toLowerCase().includes(filterValue))
-                      );
-                    }}
-                  />
-                </FormControl>
-                
-                <Typography variant="body2" paragraph sx={{ mb: 1.5 }}>
-                  This tool calculates how similar other users' brackets are to the selected user's bracket.
-                  Similarity is based on the Jaccard index of matching picks across all games.
-                </Typography>
-                
-                <Accordion disableGutters sx={{ borderRadius: 1, overflow: 'hidden' }}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
-                    aria-controls="jaccard-help-content"
-                    id="jaccard-help-header"
-                    sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}
-                  >
-                    <Typography variant="subtitle2">
-                      How is Jaccard similarity calculated?
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ bgcolor: 'info.light', pt: 0 }}>
-                    <Typography variant="body2" color="info.contrastText">
-                      The Jaccard similarity index measures the overlap between two sets of picks.
-                      It is calculated as the size of the intersection divided by the size of the union.
-                      A score of 1.0 means identical brackets, while 0.0 means completely different picks.
-                    </Typography>
-                  </AccordionDetails>
-                </Accordion>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={8}>
-            <Card>
-              <CardHeader title={selectedUser ? `Users Most Similar to ${getDisplayName(selectedUser)}` : "Select a User"} />
-              <CardContent>
-                {!selectedUser ? (
-                  <Typography variant="body1">
-                    Please select a user from the dropdown to see similar brackets.
-                  </Typography>
-                ) : (
-                  <>
-                    <Typography variant="body2" paragraph>
-                      Three similarity metrics are shown:
-                      <ul>
-                        <li><strong>Regular:</strong> Standard Jaccard similarity (all picks weighted equally)</li>
-                        <li><strong>Weighted:</strong> Picks weighted by round value (10, 20, 40, 80, 160, 320)</li>
-                        <li><strong>Shared Points:</strong> Total points from picks that both users have in common</li>
-                      </ul>
-                      Click column headers to sort. Weighted metrics emphasize matches in later rounds, which are worth more points.
-                    </Typography>
-                    
-                    <UserSimilarityTable 
-                      similarities={userSimilarities}
-                      selectedUser={selectedUser}
-                      limit={15}
-                      showDescription={false}
-                    />
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </TabPanel>
-      
-      <TabPanel value={tabValue} index={0}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={4} sx={{ order: { xs: 1, md: 1 } }}>
-            <Card>
-              <CardContent>
-                <Accordion disableGutters sx={{ borderRadius: 1, overflow: 'hidden' }}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
-                    aria-controls="score-help-content"
-                    id="score-help-header"
-                    sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}
-                  >
-                    <Typography variant="subtitle2">
-                      How are these scores calculated?
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ bgcolor: 'info.light', pt: 0 }}>
-                    <Typography variant="body2" color="info.contrastText">
-                      <strong>Chalk Score:</strong> Percentage of games where the user picked the team with the lower seed number.
-                      <br /><br />
-                      <strong>Herding Score:</strong> Percentage of games where the user picked the same team as the majority of other users.
-                      <br /><br />
-                      <strong>Deviation Score:</strong> Sum of deviation values across all games, where each deviation is calculated as (1 - [picks for team / max picks for any team]).
-                    </Typography>
-                  </AccordionDetails>
-                </Accordion>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={8} sx={{ order: { xs: 2, md: 2 } }}>
-            <PickStrategyTable
-              title="Most Chalky Brackets (Picked by Seed)"
-              description="Higher chalk score means more picks of lower-seeded favorites."
-              rows={pickStrategyTableRows}
-              defaultSortKey="chalkScore"
-              columns={['chalkScore']}
-            />
-            <PickStrategyTable
-              title="Most Popular Opinion Followers (Herding)"
-              description="Higher herding score means more picks aligned with the pool majority."
-              rows={pickStrategyTableRows}
-              defaultSortKey="herdingScore"
-              columns={['herdingScore']}
-            />
-            <PickStrategyTable
-              title="Most Contrarian Brackets"
-              description="Higher deviation score means more divergence from consensus picks."
-              rows={pickStrategyTableRows}
-              defaultSortKey="deviationScore"
-              columns={['deviationScore']}
-            />
-          </Grid>
-        </Grid>
-      </TabPanel>
-      
-      <TabPanel value={tabValue} index={2}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardHeader title="User Clustering" />
-              <CardContent>
-                <Typography variant="body1" paragraph>
-                  This visualization groups users into clusters based on their pick strategies.
-                </Typography>
-                
-                <Box sx={{ mb: 3 }}>
-                  <Typography id="cluster-slider" gutterBottom>
-                    Number of Clusters: {clusterCount}
-                  </Typography>
-                  <Slider
-                    aria-labelledby="cluster-slider"
-                    value={clusterCount}
-                    onChange={(_, newValue) => setClusterCount(newValue as number)}
-                    step={1}
-                    marks
-                    min={2}
-                    max={5}
-                    valueLabelDisplay="auto"
-                  />
-                </Box>
-                
-                <Typography variant="subtitle2">
-                  X-Axis: Chalk Score %
-                </Typography>
-                <Typography variant="subtitle2">
-                  Y-Axis: Herding Score %
-                </Typography>
-                
-                <Box sx={{ bgcolor: 'info.light', p: 2, borderRadius: 1, mt: 2 }}>
-                  <Typography variant="subtitle2" color="info.contrastText" gutterBottom>
-                    About Clustering
-                  </Typography>
-                  <Typography variant="body2" color="info.contrastText">
-                    We use k-means clustering to group users based on their pick strategies.
-                    Users in the same cluster have similar approaches to making their picks.
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-            
-            <Card sx={{ mt: 3 }}>
-              <CardHeader title="Cluster Characteristics" />
-              <CardContent>
-                <Stack spacing={2} divider={<Divider />}>
-                  {clusterDescriptions.map(cluster => (
-                    <Box key={cluster.id}>
-                      <Typography variant="subtitle1" color="primary" gutterBottom>
-                        Cluster {cluster.id} ({cluster.size} users)
-                      </Typography>
-                      <Typography variant="body2" gutterBottom>
-                        {cluster.description}
-                      </Typography>
-                      <Typography variant="body2">
-                        Avg Chalk: {cluster.avgChalkScore !== undefined ? cluster.avgChalkScore.toFixed(1) : 'N/A'}%
-                      </Typography>
-                      <Typography variant="body2">
-                        Avg Herding: {cluster.avgHerdingScore !== undefined ? cluster.avgHerdingScore.toFixed(1) : 'N/A'}%
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={9}>
-            <Card>
-              <CardHeader title="Bracket Strategy Clusters" />
-              <CardContent>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  Users clustered by their pick strategies (chalk vs. herding).
-                </Typography>
-                
-                <Paper sx={{ p: 2, height: 500 }}>
-                  {scatterData ? (
-                    <Scatter
-                      data={scatterData}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                          x: {
-                            title: {
-                              display: true,
-                              text: 'Chalk Score % (Lower Seed Picks)'
-                            },
-                            min: 0,
-                            max: 100
-                          },
-                          y: {
-                            title: {
-                              display: true,
-                              text: 'Herding Score % (Popular Picks)'
-                            },
-                            beginAtZero: true,
-                            max: 100
-                          }
-                        },
-                        plugins: {
-                          tooltip: {
-                            callbacks: {
-                              label: function(context) {
-                                const user = context.raw;
-                                return [
-                                  `${getDisplayName(user.username)}`,
-                                  `Score: ${user.score}`,
-                                  `Chalk: ${user.x.toFixed(1)}%`,
-                                  `Herding: ${user.y.toFixed(1)}%`
-                                ];
-                              }
-                            }
-                          }
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                      <Typography>No data available</Typography>
-                    </Box>
-                  )}
-                </Paper>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </TabPanel>
+    <Box sx={{ borderTop: `1px solid ${tokens.border}`, pt: 1.5 }}>
+      <ButtonBase
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        sx={{ width: '100%', justifyContent: 'space-between', py: 0.5, fontSize: '0.875rem', color: tokens.body, borderRadius: 1 }}
+      >
+        {label}
+        <ExpandMoreIcon sx={{ fontSize: 20, color: tokens.muted, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
+      </ButtonBase>
+      <Collapse in={open}>
+        <Box sx={{ pt: 1, fontSize: '0.825rem', color: tokens.body, lineHeight: 1.6 }}>{children}</Box>
+      </Collapse>
     </Box>
   );
 };
 
-export default PoolAnalysisPage; 
+const PersonCell = ({ s }: { s?: Standing }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+    <InitialsAvatar name={s?.fullName ?? '?'} seed={s?.username} size={28} />
+    <Box sx={{ minWidth: 0 }}>
+      <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 500, color: tokens.ink }}>{s?.fullName}</Typography>
+      <Typography noWrap sx={{ display: { md: 'none' }, fontSize: '0.75rem', color: tokens.muted }}>{s?.bracketName}</Typography>
+    </Box>
+  </Box>
+);
+
+const RowChevron = () => (
+  <TableCell sx={{ width: 28, px: 0, lineHeight: 0 }}>
+    <ChevronRightIcon className="row-chevron" sx={{ fontSize: 18, color: tokens.subtle }} />
+  </TableCell>
+);
+
+const clickableRowSx = { cursor: 'pointer', '&:hover .row-chevron': { color: tokens.primary } } as const;
+
+const PoolAnalysisPage = () => {
+  const { bracketData, gameResults, loading, error } = useData();
+  const { standings } = usePoolStandings(1);
+  const { yearPath } = useYearPath();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+
+  const tab: TabKey = params.get('tab') === 'similarity' || params.get('user') ? 'similarity' : 'strategy';
+  const metric: Metric = (['chalk', 'herding', 'contrarian'] as const).find((m) => m === params.get('metric')) ?? 'chalk';
+  const selectedUser = params.get('user') ?? '';
+
+  const updateParams = (next: Record<string, string | null>) => {
+    const p = new URLSearchParams(params);
+    Object.entries(next).forEach(([k, v]) => (v ? p.set(k, v) : p.delete(k)));
+    setParams(p, { replace: true });
+  };
+
+  const standingByUser = useMemo(() => new Map(standings.map((s) => [s.username, s])), [standings]);
+  const openProfile = (u: string) => navigate(yearPath(`/users/${encodeURIComponent(u)}`));
+
+  /* ---------- Pick strategy ---------- */
+  const strategy = useMemo(() => (bracketData ? computeStrategyMetrics(bracketData, gameResults) : new Map<string, StrategyMetrics>()), [bracketData, gameResults]);
+  const [strategySearch, setStrategySearch] = useState('');
+  const [strategyAsc, setStrategyAsc] = useState(false);
+  const [strategyLimit, setStrategyLimit] = useState(PAGE_SIZE);
+
+  const def = METRICS[metric];
+  const ranked = useMemo(() => {
+    const rows = [...strategy.entries()].map(([username, m]) => ({ username, value: def.value(m), standing: standingByUser.get(username) }));
+    rows.sort((a, b) => b.value - a.value);
+    return rows.map((r, i) => ({ ...r, position: i + 1 }));
+  }, [strategy, def, standingByUser]);
+  const values = ranked.map((r) => r.value);
+  const poolMedian = median(values);
+  const scaleMax = metric === 'contrarian' ? Math.max(1, ...values) : 100;
+
+  const strategyRows = useMemo(() => {
+    const q = strategySearch.trim().toLowerCase();
+    const rows = q
+      ? ranked.filter((r) => [r.username, r.standing?.fullName, r.standing?.bracketName].some((v) => v?.toLowerCase().includes(q)))
+      : ranked;
+    return strategyAsc ? [...rows].reverse() : rows;
+  }, [ranked, strategySearch, strategyAsc]);
+
+  const setMetric = (m: Metric) => {
+    updateParams({ metric: m === 'chalk' ? null : m });
+    setStrategyLimit(PAGE_SIZE);
+    setStrategyAsc(false);
+  };
+
+  /* ---------- Bracket similarity ---------- */
+  const weightedPicks = useMemo(() => {
+    const byUser = new Map<string, Map<string, number>>();
+    if (!bracketData) return byUser;
+    Object.entries(bracketData.games).forEach(([gameId, game]) => {
+      const w = ROUND_WEIGHTS[getRoundNameFromGameId(gameId) as RoundKey];
+      Object.entries(game.picks).forEach(([u, p]) => {
+        if (!byUser.has(u)) byUser.set(u, new Map());
+        byUser.get(u)!.set(`${gameId}:${p}`, w);
+      });
+    });
+    return byUser;
+  }, [bracketData]);
+
+  type SimKey = 'weighted' | 'regular' | 'shared' | 'score';
+  const [simSort, setSimSort] = useState<{ key: SimKey; asc: boolean }>({ key: 'weighted', asc: false });
+  const [simLimit, setSimLimit] = useState(PAGE_SIZE);
+
+  const similarities = useMemo(() => {
+    const mine = weightedPicks.get(selectedUser);
+    if (!mine) return [];
+    const rows: Array<{ username: string; weighted: number; regular: number; shared: number; score: number; standing?: Standing }> = [];
+    weightedPicks.forEach((theirs, u) => {
+      if (u === selectedUser) return;
+      let inter = 0;
+      let interCount = 0;
+      let union = 0;
+      new Set([...mine.keys(), ...theirs.keys()]).forEach((k) => {
+        const a = mine.get(k) ?? 0;
+        const b = theirs.get(k) ?? 0;
+        if (a && b) {
+          inter += Math.min(a, b);
+          interCount += 1;
+        }
+        union += Math.max(a, b);
+      });
+      const unionCount = mine.size + theirs.size - interCount;
+      const standing = standingByUser.get(u);
+      rows.push({
+        username: u,
+        weighted: union ? inter / union : 0,
+        regular: unionCount ? interCount / unionCount : 0,
+        shared: inter,
+        score: standing?.score ?? 0,
+        standing,
+      });
+    });
+    return rows;
+  }, [weightedPicks, selectedUser, standingByUser]);
+
+  const sortedSimilarities = useMemo(() => {
+    const dir = simSort.asc ? 1 : -1;
+    return [...similarities].sort((a, b) => (a[simSort.key] - b[simSort.key]) * dir || b.weighted - a.weighted);
+  }, [similarities, simSort]);
+
+  const toggleSimSort = (key: SimKey) => setSimSort((s) => (s.key === key ? { key, asc: !s.asc } : { key, asc: false }));
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 320 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  if (error || !bracketData) {
+    return <Typography color="error" sx={{ py: 8, textAlign: 'center' }}>{error || 'Failed to load bracket data'}</Typography>;
+  }
+
+  const selected = standingByUser.get(selectedUser) ?? null;
+  const markerPct = Math.min(100, (poolMedian / scaleMax) * 100);
+  const otherMetrics = (Object.keys(METRICS) as Metric[]).filter((m) => m !== metric);
+
+  return (
+    <Box>
+      <PageTitle subtitle="Explore how your pool is picking, and find similar brackets.">Pool analysis</PageTitle>
+
+      <Tabs
+        value={tab}
+        onChange={(_, v: TabKey) => updateParams({ tab: v === 'strategy' ? null : v, user: v === 'strategy' ? null : selectedUser || null })}
+        sx={{ borderBottom: `1px solid ${tokens.border}`, mb: 3, minHeight: 44, '& .MuiTab-root': { minHeight: 44, px: 0, mr: 4, fontWeight: 600, fontSize: '0.95rem' } }}
+      >
+        <Tab value="strategy" label="Pick strategy" />
+        <Tab value="similarity" label="Bracket similarity" />
+      </Tabs>
+
+      {tab === 'strategy' ? (
+        <>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '300px minmax(0, 1fr)', lg: '340px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
+            {/* Explainer */}
+            <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, p: 2.5, position: { md: 'sticky' }, top: { md: 88 } }}>
+              <SegmentedControl
+                fullWidth
+                value={metric}
+                onChange={setMetric}
+                options={(Object.keys(METRICS) as Metric[]).map((m) => ({ value: m, label: METRICS[m].label }))}
+              />
+              <Typography component="h2" sx={{ fontSize: '1.3rem', fontWeight: 700, letterSpacing: '-0.01em', mt: 3, mb: 1 }}>
+                {def.title}
+              </Typography>
+              <Typography sx={{ fontSize: '0.9rem', color: tokens.body, lineHeight: 1.6 }}>{def.definition}</Typography>
+
+              <Box sx={{ mt: 3, mb: 3 }}>
+                <Box sx={{ position: 'relative' }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${SPECTRUM_STEPS}, 1fr)`, gap: '2px', height: 14, borderRadius: 1, overflow: 'hidden' }}>
+                    {Array.from({ length: SPECTRUM_STEPS }, (_, i) => (
+                      <Box key={i} sx={{ bgcolor: tokens.primary, opacity: 0.12 + (i / (SPECTRUM_STEPS - 1)) * 0.88 }} />
+                    ))}
+                  </Box>
+                  <Box sx={{ position: 'absolute', top: -4, bottom: -6, left: `${markerPct}%`, width: 2, ml: '-1px', bgcolor: tokens.ink, borderRadius: 1 }} />
+                </Box>
+                <Box sx={{ position: 'relative', height: 18, mt: 0.5 }}>
+                  <Typography
+                    sx={{ position: 'absolute', left: `${Math.min(78, Math.max(22, markerPct))}%`, transform: 'translateX(-50%)', fontSize: '0.75rem', color: tokens.ink, fontWeight: 600, whiteSpace: 'nowrap' }}
+                  >
+                    Pool median {def.format(poolMedian)}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, fontSize: '0.8rem' }}>
+                  <Box>
+                    <Box sx={{ color: tokens.body }}>{def.low[0]}</Box>
+                    <Box sx={{ color: tokens.muted }}>{def.low[1]}</Box>
+                  </Box>
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Box sx={{ color: tokens.body }}>{def.high[0]}</Box>
+                    <Box sx={{ color: tokens.muted }}>{def.high[1]}</Box>
+                  </Box>
+                </Box>
+              </Box>
+
+              <Disclosure label="How scores are calculated">{def.method}</Disclosure>
+            </Box>
+
+            {/* Ranking table */}
+            <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, overflow: 'hidden', minWidth: 0 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, px: 2.5, py: 2 }}>
+                <Typography component="h2" sx={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{def.tableTitle}</Typography>
+                <TextField
+                  size="small"
+                  placeholder="Search people or brackets…"
+                  value={strategySearch}
+                  onChange={(e) => {
+                    setStrategySearch(e.target.value);
+                    setStrategyLimit(PAGE_SIZE);
+                  }}
+                  sx={{ width: { xs: '100%', sm: 260 } }}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: tokens.muted }} /></InputAdornment> }}
+                />
+              </Box>
+              <TableContainer sx={{ maxHeight: 720 }}>
+                <Table size="small" stickyHeader sx={{ '& td': { py: 1.1 } }}>
+                  <TableHead>
+                    <TableRow sx={{ '& th': headCellSx }}>
+                      <TableCell sx={{ width: 64, pl: 2.5 }}>Rank</TableCell>
+                      <TableCell>Person</TableCell>
+                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Bracket name</TableCell>
+                      <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Pool rank</TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel active direction={strategyAsc ? 'asc' : 'desc'} onClick={() => setStrategyAsc((a) => !a)}>
+                          {def.column}
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell sx={{ width: 28, px: 0 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {strategyRows.slice(0, strategyLimit).map((r) => (
+                      <TableRow key={r.username} hover onClick={() => openProfile(r.username)} sx={clickableRowSx}>
+                        <TableCell sx={{ pl: 2.5, color: tokens.body }}>{r.position}</TableCell>
+                        <TableCell sx={{ maxWidth: 240 }}>
+                          <PersonCell s={r.standing} />
+                        </TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, color: tokens.body, maxWidth: 240 }}>
+                          <Typography noWrap sx={{ fontSize: '0.875rem' }}>{r.standing?.bracketName}</Typography>
+                        </TableCell>
+                        <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' }, color: tokens.muted }}>
+                          #{r.standing?.rank ?? '–'}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>{def.format(r.value)}</TableCell>
+                        <RowChevron />
+                      </TableRow>
+                    ))}
+                    {strategyRows.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} sx={{ py: 4, textAlign: 'center', color: tokens.muted }}>No brackets match “{strategySearch}”.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {strategyRows.length > strategyLimit && (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, borderTop: `1px solid ${tokens.border}` }}>
+                  <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
+                    Showing {fmt(strategyLimit)} of {fmt(strategyRows.length)}
+                  </Typography>
+                  <Button size="small" onClick={() => setStrategyLimit((n) => n + PAGE_SIZE * 2)}>Show more</Button>
+                </Box>
+              )}
+            </Box>
+          </Box>
+
+          {/* Cross-links to the other two metrics */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mt: 3 }}>
+            {otherMetrics.map((m) => (
+              <ButtonBase
+                key={m}
+                onClick={() => {
+                  setMetric(m);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 2,
+                  textAlign: 'left',
+                  border: `1px solid ${tokens.border}`,
+                  borderRadius: 3,
+                  px: 2.5,
+                  py: 2,
+                  transition: 'border-color 150ms',
+                  '&:hover': { borderColor: tokens.primary },
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>{METRICS[m].linkTitle}</Typography>
+                  <Typography sx={{ fontSize: '0.825rem', color: tokens.muted }}>{METRICS[m].linkBody}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.primarySoft, display: { xs: 'none', sm: 'grid' }, placeItems: 'center' }}>
+                    <GroupsOutlinedIcon sx={{ fontSize: 22, color: tokens.primary }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.825rem', color: tokens.primary, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    View {METRICS[m].label.toLowerCase()} rankings
+                  </Typography>
+                  <ChevronRightIcon sx={{ color: tokens.primary }} />
+                </Box>
+              </ButtonBase>
+            ))}
+          </Box>
+        </>
+      ) : (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '280px minmax(0, 1fr)', lg: '300px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
+          <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, p: 2.5, position: { md: 'sticky' }, top: { md: 88 } }}>
+            <Typography sx={{ fontWeight: 700, mb: 1.25 }}>Compare bracket</Typography>
+            <Autocomplete
+              options={standings}
+              value={selected}
+              onChange={(_, v) => {
+                updateParams({ tab: 'similarity', user: v?.username ?? null });
+                setSimLimit(PAGE_SIZE);
+              }}
+              getOptionLabel={(o) => o.fullName}
+              isOptionEqualToValue={(o, v) => o.username === v.username}
+              filterOptions={(opts, { inputValue }) => {
+                const q = inputValue.trim().toLowerCase();
+                return (q ? opts.filter((o) => [o.username, o.fullName, o.bracketName].some((v) => v.toLowerCase().includes(q))) : opts).slice(0, 50);
+              }}
+              renderOption={(props, o) => (
+                <Box component="li" {...props} key={o.username}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontSize: '0.875rem' }}>{o.fullName}</Typography>
+                    <Typography noWrap sx={{ fontSize: '0.75rem', color: tokens.muted }}>{o.bracketName}</Typography>
+                  </Box>
+                </Box>
+              )}
+              renderInput={(p) => <TextField {...p} size="small" placeholder="Search people or brackets…" />}
+            />
+            {selected && (
+              <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '1.2rem', fontWeight: 700 }}>#{selected.rank}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: tokens.muted }}>Pool rank</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '1.2rem', fontWeight: 700 }}>{fmt(selected.score)}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: tokens.muted }}>Score</Typography>
+                </Box>
+              </Box>
+            )}
+            <Box sx={{ mt: 2.5 }}>
+              <Disclosure label="How similarity works">
+                <Box component="dl" sx={{ m: 0, '& dt': { fontWeight: 600, color: tokens.ink }, '& dd': { m: 0, mb: 1 } }}>
+                  <dt>Weighted</dt>
+                  <dd>Overlap of picks, with each pick weighted by its round’s points (10 → 320). Late-round agreement counts most.</dd>
+                  <dt>Regular</dt>
+                  <dd>Share of picks in common, every game counted equally (Jaccard index).</dd>
+                  <dt>Shared points</dt>
+                  <dd>Total point value of the picks both brackets made.</dd>
+                </Box>
+              </Disclosure>
+            </Box>
+          </Box>
+
+          <Box sx={{ border: `1px solid ${tokens.border}`, borderRadius: 3, overflow: 'hidden', minWidth: 0 }}>
+            <Box sx={{ px: 2.5, py: 2 }}>
+              <Typography component="h2" sx={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.01em' }}>
+                {selected ? `Brackets most similar to ${selected.fullName}` : 'Similar brackets'}
+              </Typography>
+            </Box>
+            {!selected ? (
+              <Typography sx={{ px: 2.5, pb: 4, color: tokens.muted }}>Pick a bracket on the left to see who picked most like it.</Typography>
+            ) : (
+              <>
+                <TableContainer sx={{ maxHeight: 720 }}>
+                  <Table size="small" stickyHeader sx={{ '& td': { py: 1.1 } }}>
+                    <TableHead>
+                      <TableRow sx={{ '& th': headCellSx }}>
+                        <TableCell sx={{ width: 52, pl: 2.5 }}>#</TableCell>
+                        <TableCell>Person</TableCell>
+                        <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>Bracket name</TableCell>
+                        {(
+                          [
+                            ['weighted', 'Weighted'],
+                            ['regular', 'Regular'],
+                            ['shared', 'Shared pts'],
+                            ['score', 'Score'],
+                          ] as Array<[SimKey, string]>
+                        ).map(([key, label]) => (
+                          <TableCell key={key} align="right" sx={key === 'regular' || key === 'score' ? { display: { xs: 'none', sm: 'table-cell' } } : undefined}>
+                            <TableSortLabel active={simSort.key === key} direction={simSort.key === key && simSort.asc ? 'asc' : 'desc'} onClick={() => toggleSimSort(key)}>
+                              {label}
+                            </TableSortLabel>
+                          </TableCell>
+                        ))}
+                        <TableCell sx={{ width: 28, px: 0 }} />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sortedSimilarities.slice(0, simLimit).map((r, i) => (
+                        <TableRow key={r.username} hover onClick={() => openProfile(r.username)} sx={clickableRowSx}>
+                          <TableCell sx={{ pl: 2.5, color: tokens.body }}>{i + 1}</TableCell>
+                          <TableCell sx={{ maxWidth: 220 }}>
+                            <PersonCell s={r.standing} />
+                          </TableCell>
+                          <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' }, color: tokens.body, maxWidth: 200 }}>
+                            <Typography noWrap sx={{ fontSize: '0.875rem' }}>{r.standing?.bracketName}</Typography>
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>{(r.weighted * 100).toFixed(1)}%</TableCell>
+                          <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' }, color: tokens.body }}>{(r.regular * 100).toFixed(1)}%</TableCell>
+                          <TableCell align="right" sx={{ color: tokens.body }}>{fmt(r.shared)}</TableCell>
+                          <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' }, color: tokens.body }}>{fmt(r.score)}</TableCell>
+                          <RowChevron />
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                {sortedSimilarities.length > simLimit && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, borderTop: `1px solid ${tokens.border}` }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
+                      Showing {fmt(simLimit)} of {fmt(sortedSimilarities.length)}
+                    </Typography>
+                    <Button size="small" onClick={() => setSimLimit((n) => n + PAGE_SIZE * 2)}>Show more</Button>
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+export default PoolAnalysisPage;

@@ -15,6 +15,7 @@ import {
   TableSortLabel,
   Typography,
 } from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useData } from '../context/DataContext';
 import { ROUNDS } from '../types';
 import { useYearPath } from '../utils/yearRouting';
@@ -45,29 +46,22 @@ interface GameRow {
 const HIGHLIGHT_COUNT = 5;
 const fmt = (n: number) => n.toLocaleString();
 
-const TeamLink = ({ code, seed, yearPath, bold }: { code: string; seed?: number | null; yearPath: (p: string) => string; bold?: boolean }) => (
+const TeamLabel = ({ code, seed, bold }: { code: string; seed?: number | null; bold?: boolean }) => (
   <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
     {seed ? (
       <Box component="span" sx={{ color: tokens.muted, fontSize: '0.8em', mr: 0.75 }}>
         {seed}
       </Box>
     ) : null}
-    <Link component={RouterLink} to={yearPath(`/teams/${code}`)} underline="hover" color="inherit" sx={{ fontWeight: bold ? 600 : 400 }}>
-      {code}
-    </Link>
+    <Box component="span" sx={{ fontWeight: bold ? 600 : 400 }}>{code}</Box>
   </Box>
 );
 
-const Slot = ({ slot, yearPath }: { slot: MatchupSlot; yearPath: (p: string) => string }) =>
+const Slot = ({ slot, seedByTeam }: { slot: MatchupSlot; seedByTeam: Record<string, number> }) =>
   slot.type === 'team' ? (
-    <TeamLink code={slot.code} yearPath={yearPath} />
+    <TeamLabel code={slot.code} seed={seedByTeam[slot.code]} />
   ) : (
-    <Box component="span" sx={{ color: tokens.muted }}>
-      Winner of{' '}
-      <Link component={RouterLink} to={yearPath(`/games/${slot.feederGameId}`)} underline="hover">
-        Game {slot.feederGameId}
-      </Link>
-    </Box>
+    <Box component="span" sx={{ color: tokens.muted }}>TBD</Box>
   );
 
 const Stat = ({ value, label, detail }: { value: string; label: string; detail: string }) => (
@@ -114,6 +108,15 @@ const RoundPage = () => {
         };
       });
   }, [bracketData, gameWinners, gameResults, roundGames]);
+
+  const seedByTeam = useMemo(() => {
+    const m: Record<string, number> = {};
+    gameResults.forEach((r) => {
+      m[r.winner] = r.winnerSeed;
+      m[r.loser] = r.loserSeed;
+    });
+    return m;
+  }, [gameResults]);
 
   const completed = rows.filter((r) => r.completed);
   const correctTotal = completed.reduce((s, r) => s + r.correct, 0);
@@ -169,9 +172,9 @@ const RoundPage = () => {
 
   const matchupLabel = (r: GameRow) => (
     <>
-      <TeamLink code={r.winner} seed={r.winnerSeed} yearPath={yearPath} />
+      <TeamLabel code={r.winner} seed={r.winnerSeed} />
       <Box component="span" sx={{ color: tokens.subtle, mx: 1 }}>vs</Box>
-      <TeamLink code={r.loser} seed={r.loserSeed} yearPath={yearPath} />
+      <TeamLabel code={r.loser} seed={r.loserSeed} />
     </>
   );
 
@@ -285,6 +288,8 @@ const RoundPage = () => {
         </Box>
       </Box>
 
+      {view === 'games' && (
+      <>
       <SectionHeading>Game details</SectionHeading>
       <TableContainer sx={{ border: `1px solid ${tokens.border}`, borderRadius: 2.5, maxHeight: { md: 720 } }}>
         <Table size="small" stickyHeader sx={{ minWidth: 640, '& td, & th': { py: 1.25 } }}>
@@ -310,6 +315,7 @@ const RoundPage = () => {
                   Accuracy
                 </TableSortLabel>
               </TableCell>
+              <TableCell sx={{ width: 32 }} />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -317,30 +323,28 @@ const RoundPage = () => {
               const pending = Object.entries(r.distribution).sort((a, b) => b[1] - a[1]);
               const pendingTotal = pending.reduce((s, [, n]) => s + n, 0) || 1;
               return (
-                <TableRow key={r.gameId} hover>
+                <TableRow
+                  key={r.gameId}
+                  hover
+                  onClick={() => navigate(yearPath(`/games/${r.gameId}`))}
+                  sx={{ cursor: 'pointer', '&:hover .row-chevron': { color: tokens.primary } }}
+                >
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
-                      <Link component={RouterLink} to={yearPath(`/games/${r.gameId}`)} underline="hover" sx={{ fontSize: '0.75rem', color: tokens.muted, minWidth: 28 }}>
-                        G{r.gameId}
-                      </Link>
-                      <Box>
-                        {r.completed ? (
-                          matchupLabel(r)
-                        ) : r.slots ? (
-                          <>
-                            <Slot slot={r.slots[0]} yearPath={yearPath} />
-                            <Box component="span" sx={{ color: tokens.subtle, mx: 1 }}>vs</Box>
-                            <Slot slot={r.slots[1]} yearPath={yearPath} />
-                          </>
-                        ) : (
-                          `Game ${r.gameId}`
-                        )}
-                      </Box>
-                    </Box>
+                    {r.completed ? (
+                      matchupLabel(r)
+                    ) : r.slots ? (
+                      <>
+                        <Slot slot={r.slots[0]} seedByTeam={seedByTeam} />
+                        <Box component="span" sx={{ color: tokens.subtle, mx: 1 }}>vs</Box>
+                        <Slot slot={r.slots[1]} seedByTeam={seedByTeam} />
+                      </>
+                    ) : (
+                      'TBD'
+                    )}
                   </TableCell>
                   <TableCell>
                     {r.completed ? (
-                      <TeamLink code={r.winner} seed={r.winnerSeed} yearPath={yearPath} bold />
+                      <TeamLabel code={r.winner} seed={r.winnerSeed} bold />
                     ) : (
                       <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
                         Pending · most picked {pending[0]?.[0]} ({Math.round(((pending[0]?.[1] ?? 0) / pendingTotal) * 100)}%)
@@ -353,12 +357,17 @@ const RoundPage = () => {
                   <TableCell align="right" sx={{ fontWeight: 700, color: !r.completed ? tokens.muted : r.accuracy >= 50 ? tokens.up : tokens.down }}>
                     {r.completed ? `${Math.round(r.accuracy)}%` : '—'}
                   </TableCell>
+                  <TableCell sx={{ width: 32, pl: 0, lineHeight: 0 }}>
+                    <ChevronRightIcon className="row-chevron" sx={{ fontSize: 18, color: tokens.subtle }} />
+                  </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
       </TableContainer>
+      </>
+      )}
     </Box>
   );
 };

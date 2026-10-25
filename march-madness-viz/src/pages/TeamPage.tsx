@@ -76,8 +76,7 @@ const TeamPage = () => {
   const navigate = useNavigate();
   const { yearPath } = useYearPath();
   const { teamConfidence, gameResults, bracketData, userNameMapping, loading, error } = useData();
-  const [chartMode, setChartMode] = useState<Mode>('pct');
-  const [compareMode, setCompareMode] = useState<Mode>('pct');
+  const [mode, setMode] = useState<Mode>('pct');
   const [expandedBucket, setExpandedBucket] = useState<number | null>(null);
 
   const seedByTeam = useMemo(() => {
@@ -137,8 +136,8 @@ const TeamPage = () => {
   }
 
   const seed = seedByTeam[team];
-  const chartValues = CONFIDENCE_KEYS.map((k) => (chartMode === 'pct' ? confidence[k] : confidence[`${k}_count`]) ?? 0);
-  const compareValue = (t: (typeof comparison)[number]) => (compareMode === 'pct' ? t.championship : t.championship_count);
+  const chartValues = CONFIDENCE_KEYS.map((k) => (mode === 'pct' ? confidence[k] : confidence[`${k}_count`]) ?? 0);
+  const compareValue = (t: (typeof comparison)[number]) => (mode === 'pct' ? t.championship : t.championship_count);
   const compareMax = Math.max(...comparison.map(compareValue), 1);
 
   const status = (() => {
@@ -175,6 +174,17 @@ const TeamPage = () => {
             <Typography sx={{ fontSize: '0.85rem', color: tokens.muted }}>Seed</Typography>
           </Box>
         )}
+        <Box sx={{ ml: { md: 'auto' } }}>
+          <SegmentedControl
+            size="small"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'pct', label: 'Percentages' },
+              { value: 'count', label: 'Counts' },
+            ]}
+          />
+        </Box>
       </Box>
 
       {/* Status + confidence chart */}
@@ -220,21 +230,7 @@ const TeamPage = () => {
         </Box>
 
         <Box>
-          <SectionHeading
-            action={
-              <SegmentedControl
-                size="small"
-                value={chartMode}
-                onChange={setChartMode}
-                options={[
-                  { value: 'count', label: 'Counts' },
-                  { value: 'pct', label: 'Percentages' },
-                ]}
-              />
-            }
-          >
-            Team confidence by round
-          </SectionHeading>
+          <SectionHeading>Team confidence by round</SectionHeading>
           <Typography sx={{ fontSize: '0.8rem', color: tokens.muted, mt: -1.5, mb: 1 }}>
             Brackets that picked {team} to win a game in each round. Dashed is past where {team} actually got to.
           </Typography>
@@ -242,7 +238,7 @@ const TeamPage = () => {
             values={chartValues}
             labels={ROUND_ORDER.map((r) => ROUND_LABELS[r].short)}
             solidThrough={champion ? 5 : roundsPlayed - 1}
-            format={chartMode === 'pct' ? fmtPct : (n) => fmt(Math.round(n))}
+            format={mode === 'pct' ? fmtPct : (n) => fmt(Math.round(n))}
           />
         </Box>
       </Box>
@@ -251,24 +247,13 @@ const TeamPage = () => {
       <Box sx={{ py: 4, borderBottom: `1px solid ${tokens.border}` }}>
         <SectionHeading
           action={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-              <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 2, fontSize: '0.8rem', color: tokens.muted }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: tokens.primary }} /> {team}
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#b6bfcc' }} /> Other top teams
-                </Box>
+            <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 2, fontSize: '0.8rem', color: tokens.muted }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: tokens.primary }} /> {team}
               </Box>
-              <SegmentedControl
-                size="small"
-                value={compareMode}
-                onChange={setCompareMode}
-                options={[
-                  { value: 'count', label: 'Counts' },
-                  { value: 'pct', label: 'Percentages' },
-                ]}
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#b6bfcc' }} /> Other top teams
+              </Box>
             </Box>
           }
         >
@@ -288,7 +273,7 @@ const TeamPage = () => {
                   <Meter value={(v / compareMax) * 85} color={selected ? tokens.primary : '#b6bfcc'} height={8} dot />
                 </Box>
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: selected ? 700 : 500, textAlign: 'right' }}>
-                  {compareMode === 'pct' ? fmtPct(v) : fmt(v)}
+                  {mode === 'pct' ? fmtPct(v) : fmt(v)}
                 </Typography>
               </Box>
             );
@@ -316,9 +301,11 @@ const TeamPage = () => {
               <Box key={DEPTH_LABELS[depth]} sx={{ px: 2, borderLeft: `1px solid ${tokens.border}`, minWidth: 0 }}>
                 <Typography sx={{ fontSize: '0.8rem', color: tokens.body, mb: 0.5, whiteSpace: 'nowrap' }}>{DEPTH_LABELS[depth]}</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1 }}>
-                  <Typography sx={{ fontSize: '1.5rem', fontWeight: 800 }}>{fmt(users.length)}</Typography>
+                  <Typography sx={{ fontSize: '1.5rem', fontWeight: 800 }}>
+                    {mode === 'pct' ? fmtPct(totalBrackets ? (users.length / totalBrackets) * 100 : 0) : fmt(users.length)}
+                  </Typography>
                   <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
-                    {totalBrackets ? fmtPct((users.length / totalBrackets) * 100) : ''}
+                    {mode === 'pct' ? `${fmt(users.length)} brackets` : totalBrackets ? fmtPct((users.length / totalBrackets) * 100) : ''}
                   </Typography>
                 </Box>
                 <Box sx={{ maxHeight: expanded ? 320 : 'none', overflowY: expanded ? 'auto' : 'visible' }}>
