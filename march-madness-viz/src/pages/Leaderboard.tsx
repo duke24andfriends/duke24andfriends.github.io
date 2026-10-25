@@ -1,46 +1,29 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useEffect, useMemo, useState, MouseEvent, ReactNode } from 'react';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Typography,
-  TextField,
-  Stack,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  CircularProgress,
-  InputAdornment,
-  Select,
-  MenuItem,
-  FormControl,
-  FormControlLabel,
-  Switch,
-  Tabs,
-  Tab,
-  Chip,
-  Snackbar,
   Alert,
-  IconButton,
-  Paper,
-  Table,
-  TableContainer,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Tooltip as TooltipComponent,
-  Avatar,
-  Collapse
+  Box,
+  Button,
+  ButtonBase,
+  CircularProgress,
+  Collapse,
+  InputAdornment,
+  Link,
+  ListItemIcon,
+  Menu,
+  MenuItem,
+  Snackbar,
+  TextField,
+  Typography,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { 
-  Search as SearchIcon, 
-  ContentCopy as ContentCopyIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon 
-} from '@mui/icons-material';
-import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import SwapVertIcon from '@mui/icons-material/SwapVert';
+import SearchIcon from '@mui/icons-material/Search';
+import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
+import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -48,1134 +31,520 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  Title,
   Tooltip,
-  Legend
+  Legend,
 } from 'chart.js';
 import { useData } from '../context/DataContext';
-import { ROUNDS, UserScore } from '../types';
 import { useYearPath } from '../utils/yearRouting';
+import {
+  ROUND_LABELS,
+  ROUND_MAX_POINTS,
+  ROUND_ORDER,
+  RoundKey,
+  Standing,
+  usePoolStandings,
+} from '../hooks/usePoolStandings';
+import InitialsAvatar from '../components/ui/InitialsAvatar';
+import ChangeIndicator from '../components/ui/ChangeIndicator';
+import { tokens } from '../theme';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+
+type SortKey = 'score' | 'maxPossible' | 'movers' | 'name';
+type View = 'standings' | 'trend';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  score: 'Total points',
+  maxPossible: 'Max possible',
+  movers: 'Biggest movers',
+  name: 'Name',
+};
+
+const PAGE_SIZE = 50;
+const TREND_DEFAULT_COUNT = 10;
+const TREND_COLORS = ['#1565d8', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777', '#4f46e5', '#65a30d', '#0f766e', '#b91c1c'];
+
+const fmt = (n: number) => n.toLocaleString();
+
+/* ---------- small pieces ---------- */
+
+const Segmented = ({ value, onChange }: { value: View; onChange: (v: View) => void }) => (
+  <Box sx={{ display: 'flex', p: 0.5, bgcolor: tokens.surfaceAlt, borderRadius: 999, maxWidth: 520 }}>
+    {(['standings', 'trend'] as View[]).map((v) => {
+      const active = v === value;
+      return (
+        <ButtonBase
+          key={v}
+          onClick={() => onChange(v)}
+          sx={{
+            flex: 1,
+            py: 1,
+            borderRadius: 999,
+            fontSize: '0.95rem',
+            fontWeight: active ? 600 : 500,
+            color: active ? '#fff' : tokens.ink,
+            bgcolor: active ? tokens.primary : 'transparent',
+            transition: 'background-color 150ms',
+          }}
+        >
+          {v === 'standings' ? 'Standings' : 'Score trend'}
+        </ButtonBase>
+      );
+    })}
+  </Box>
 );
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+const FilterChip = ({
+  label,
+  icon,
+  onClick,
+  active,
+}: {
+  label: string;
+  icon?: ReactNode;
+  onClick: (e: MouseEvent<HTMLElement>) => void;
+  active?: boolean;
+}) => (
+  <ButtonBase
+    onClick={onClick}
+    sx={{
+      gap: 0.5,
+      px: { xs: 1.25, sm: 1.5 },
+      py: 0.9,
+      borderRadius: 2.5,
+      border: `1px solid ${active ? tokens.primary : tokens.border}`,
+      bgcolor: active ? tokens.primarySoft : tokens.surface,
+      color: active ? tokens.primary : tokens.ink,
+      fontSize: '0.875rem',
+      fontWeight: 500,
+      whiteSpace: 'nowrap',
+      '& svg': { fontSize: 18 },
+    }}
+  >
+    {icon}
+    {label}
+    <KeyboardArrowDownIcon />
+  </ButtonBase>
+);
+
+const ProgressBar = ({ value }: { value: number }) => (
+  <Box sx={{ height: 8, borderRadius: 4, bgcolor: '#e9edf2', overflow: 'hidden', flex: 1 }}>
+    <Box sx={{ height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, bgcolor: tokens.primary, borderRadius: 4 }} />
+  </Box>
+);
+
+/* ---------- row ---------- */
+
+interface RowProps {
+  standing: Standing;
+  round: RoundKey | null;
+  expanded: boolean;
+  inGroup: boolean;
+  onToggleExpand: () => void;
+  onToggleGroup: () => void;
+  userPath: string;
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+const StandingRow = ({ standing: s, round, expanded, inGroup, onToggleExpand, onToggleGroup, userPath }: RowProps) => {
+  const primary = round ? s.roundScores[round] : s.score;
+  const outOf = round ? ROUND_MAX_POINTS : s.maxPossible;
+  const pct = outOf > 0 ? Math.round((primary / outOf) * 100) : 0;
 
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`leaderboard-tabpanel-${index}`}
-      aria-labelledby={`leaderboard-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: { xs: 1, sm: 3 } }}>
-          {children}
+    <Box sx={{ borderBottom: `1px solid ${tokens.border}` }}>
+      <ButtonBase
+        onClick={onToggleExpand}
+        aria-expanded={expanded}
+        sx={{ width: '100%', display: 'block', textAlign: 'left', py: 2, px: { xs: 0, sm: 1 }, '&:hover': { bgcolor: { md: tokens.surfaceAlt } } }}
+      >
+        <Box sx={{ display: 'grid', gridTemplateColumns: '32px 48px minmax(0,1fr) auto 28px', alignItems: 'center', columnGap: 1.5 }}>
+          <Typography sx={{ fontSize: '1.3rem', fontWeight: 700, textAlign: 'center' }}>{s.rank}</Typography>
+          <InitialsAvatar name={s.fullName} seed={s.username} size={48} highlight={s.rank === 1} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography noWrap sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
+              {s.fullName}
+            </Typography>
+            <Typography noWrap sx={{ color: tokens.muted, fontSize: '0.9rem' }}>
+              {s.bracketName}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+              <Typography sx={{ fontSize: '1.2rem', fontWeight: 700 }}>{fmt(primary)}</Typography>
+              {!round && s.rankChange !== 0 && (
+                <ChangeIndicator value={s.rankChange} label={String(Math.abs(s.rankChange))} fontSize="0.85rem" />
+              )}
+            </Box>
+            <Typography sx={{ color: tokens.muted, fontSize: '0.85rem' }}>
+              {round ? `of ${ROUND_MAX_POINTS} in ${ROUND_LABELS[round].short}` : `${fmt(s.maxPossible)} max`}
+            </Typography>
+          </Box>
+          <Box sx={{ color: tokens.ink, display: 'flex', justifyContent: 'center' }}>
+            {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </Box>
         </Box>
-      )}
-    </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1.25, ml: { xs: 0, sm: '44px' } }}>
+          <ProgressBar value={pct} />
+          <Typography sx={{ color: tokens.muted, fontSize: '0.8rem', whiteSpace: 'nowrap', minWidth: 78, textAlign: 'right' }}>
+            {pct}% of max
+          </Typography>
+        </Box>
+      </ButtonBase>
+
+      <Collapse in={expanded} unmountOnExit>
+        <Box sx={{ pb: 2, px: { xs: 0, sm: 1 } }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+              bgcolor: tokens.surfaceAlt,
+              borderRadius: 2,
+              py: 1.5,
+            }}
+          >
+            {ROUND_ORDER.map((r, i) => (
+              <Box key={r} sx={{ px: { xs: 0.75, sm: 2 }, borderLeft: i ? `1px solid ${tokens.border}` : 'none', minWidth: 0 }}>
+                <Typography sx={{ color: tokens.muted, fontSize: '0.8rem', mb: 0.5 }}>{ROUND_LABELS[r].short}</Typography>
+                <Typography sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' }, lineHeight: 1.3 }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>{s.roundScores[r]}</Box>{' '}
+                  <Box component="span" sx={{ color: tokens.muted, fontSize: { xs: '0.72rem', sm: 'inherit' }, whiteSpace: 'nowrap' }}>/ {ROUND_MAX_POINTS}</Box>
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mt: 1.5 }}>
+            {s.champion && (
+              <Typography sx={{ fontSize: '0.875rem', color: tokens.muted, mr: 'auto' }}>
+                Champion pick: <Box component="span" sx={{ color: tokens.ink, fontWeight: 600 }}>{s.champion}</Box>
+              </Typography>
+            )}
+            <Button
+              size="small"
+              variant={inGroup ? 'contained' : 'outlined'}
+              startIcon={inGroup ? <PersonRemoveOutlinedIcon /> : <PersonAddAltIcon />}
+              onClick={onToggleGroup}
+            >
+              {inGroup ? 'In group' : 'Add to group'}
+            </Button>
+            <Button size="small" component={RouterLink} to={userPath}>
+              View bracket →
+            </Button>
+          </Box>
+        </Box>
+      </Collapse>
+    </Box>
   );
-}
+};
 
-function getRoundDisplayName(roundKey: string): string {
-  switch (roundKey) {
-    case 'ROUND_64': return 'Round of 64';
-    case 'ROUND_32': return 'Round of 32';
-    case 'SWEET_16': return 'Sweet 16';
-    case 'ELITE_8': return 'Elite 8';
-    case 'FINAL_FOUR': return 'Final Four';
-    case 'CHAMPIONSHIP': return 'Championship';
-    default: return roundKey;
+/* ---------- trend ---------- */
+
+const ScoreTrend = ({ standings, group }: { standings: Standing[]; group: Standing[] }) => {
+  const { gameResults } = useData();
+  const shown = group.length ? group : standings.slice(0, TREND_DEFAULT_COUNT);
+  const ordered = useMemo(() => [...gameResults].sort((a, b) => a.order - b.order), [gameResults]);
+
+  if (!ordered.length) {
+    return <Typography sx={{ color: tokens.muted, py: 6, textAlign: 'center' }}>No games played yet.</Typography>;
   }
-}
 
-/** Mobile leaderboard: widths (px) for right-sticky Pts / Pick / More so score stays on-screen while scrolling bracket */
-const MOBILE_LB_MORE_W = 42;
-const MOBILE_LB_PICK_W = 56;
-const MOBILE_LB_STICKY_PTS_RIGHT = MOBILE_LB_MORE_W + MOBILE_LB_PICK_W;
-
-const Leaderboard = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { yearPath } = useYearPath();
-  const { userScores, filteredUsernames, setFilteredUsernames, leaderboardTrend, bracketData, loading, error, gameResults } = useData();
-  
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [isFilterActive, setIsFilterActive] = useState(false);
-  const [tabValue, setTabValue] = useState(0);
-  const [alertOpen, setAlertOpen] = useState(false);
-  const [expandedUsers, setExpandedUsers] = useState<string[]>([]);
-  const [sortConfig, setSortConfig] = useState({
-    key: 'score',
-    direction: 'descending'
-  });
-  
-  // Initialize selectedUsers from filteredUsernames when component mounts or filteredUsernames changes
-  useEffect(() => {
-    if (filteredUsernames.length > 0) {
-      setSelectedUsers(filteredUsernames);
-      setIsFilterActive(true);
-    }
-  }, [filteredUsernames]);
-  
-  // Effect to handle URL parameters for filtered users
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const userParam = urlParams.get('users');
-    
-    if (userParam) {
-      const usernames = userParam.split(',');
-      setSelectedUsers(usernames);
-      setFilteredUsernames(usernames);
-      setIsFilterActive(true);
-    }
-  }, [location.search, setFilteredUsernames]);
-  
-  // Set initial sort to score
-  useEffect(() => {
-    // Set the default sort to be score (ascending)
-    setSortConfig({
-      key: 'score',
-      direction: 'descending'
-    });
-  }, []);
-  
-  // Calculate recent performance - last 4 games
-  const getRecentPerformance = useMemo(() => {
-    if (!gameResults.length || !bracketData || !bracketData.games) return new Map<string, number>();
-    
-    const sortedGames = [...gameResults].sort((a, b) => b.order - a.order);
-    const recentGames = sortedGames.slice(0, 4); // Last 4 games
-    
-    const performanceMap = new Map<string, number>();
-    
-    // Go through recent games and check user picks
-    recentGames.forEach(game => {
-      const gameId = game.gameId;
-      const winner = game.winner;
-      
-      // Get the game data from bracketData
-      const bracketGame = bracketData.games[gameId];
-      if (!bracketGame || !bracketGame.picks) return;
-      
-      // Check each user's pick for this game
-      Object.entries(bracketGame.picks).forEach(([username, pick]) => {
-        if (pick === winner) {
-          performanceMap.set(username, (performanceMap.get(username) || 0) + 1);
-        }
-      });
-    });
-    
-    return performanceMap;
-  }, [gameResults, bracketData]);
-  
-  // Calculate rank with ties
-  const getRank = (index: number, users: any[]) => {
-    if (index === 0) return 1;
-    
-    const currentUser = users[index];
-    const prevUser = users[index - 1];
-    
-    if (sortConfig.key === 'score') {
-      return currentUser.score === prevUser.score ? getRank(index - 1, users) : index + 1;
-    } else if (sortConfig.key === 'maxPossible') {
-      return (currentUser.maxPossibleScore || 0) === (prevUser.maxPossibleScore || 0) 
-        ? getRank(index - 1, users) 
-        : index + 1;
-    } else if (sortConfig.key === 'roundScore' && sortConfig.round) {
-      return (currentUser.roundScores?.[sortConfig.round] || 0) === (prevUser.roundScores?.[sortConfig.round] || 0)
-        ? getRank(index - 1, users)
-        : index + 1;
-    }
-    
-    return index + 1;
-  };
-  
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-  
-  const handleToggleFilter = () => {
-    const newFilterState = !isFilterActive;
-    setIsFilterActive(newFilterState);
-    
-    if (!newFilterState) {
-      // Clear filter
-      setFilteredUsernames([]);
-      
-      // Update URL to remove the filter
-      navigate(yearPath('/leaderboard'), { replace: true });
-    } else if (selectedUsers.length > 0) {
-      // Apply filter
-      setFilteredUsernames(selectedUsers);
-      
-      // Update URL with filtered users
-      const queryParams = new URLSearchParams();
-      queryParams.set('users', selectedUsers.join(','));
-      navigate(`${yearPath('/leaderboard')}?${queryParams.toString()}`, { replace: true });
-    }
-  };
-  
-  const toggleUserSelection = (username: string) => {
-    setSelectedUsers(prev => {
-      if (prev.includes(username)) {
-        return prev.filter(u => u !== username);
-      } else {
-        return [...prev, username];
-      }
-    });
-  };
-  
-  const toggleUserExpanded = (username: string) => {
-    setExpandedUsers(prev => {
-      if (prev.includes(username)) {
-        return prev.filter(u => u !== username);
-      } else {
-        return [...prev, username];
-      }
-    });
-  };
-  
-  const createShareableLink = () => {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const userParams = selectedUsers.length > 0 ? `?users=${selectedUsers.join(',')}` : '';
-    const shareableLink = baseUrl + userParams;
-    
-    // Copy to clipboard
-    navigator.clipboard.writeText(shareableLink);
-    setAlertOpen(true);
-  };
-  
-  const handleAlertClose = () => {
-    setAlertOpen(false);
-  };
-  
-  // Filter users based on search term
-  const filteredUsers = useMemo(() => {
-    return userScores.filter(user => 
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.bracketName && user.bracketName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (user.fullName && user.fullName.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-  }, [userScores, searchTerm]);
-  
-  // Get current users to display based on filter status
-  const currentUsers = useMemo(() => {
-    if (isFilterActive && selectedUsers.length > 0) {
-      return userScores.filter(user => selectedUsers.includes(user.username));
-    }
-    return filteredUsers;
-  }, [filteredUsers, isFilterActive, selectedUsers, userScores]);
-  
-  // Extract champion picks and calculate max possible scores
-  const enhancedUserScores = useMemo(() => {
-    if (!bracketData || !bracketData.games || !gameResults) {
-      return currentUsers;
-    }
-
-    // Get championship game data (game ID 63)
-    const championshipGame = bracketData.games["63"];
-    
-    // Map from gameId to round
-    const gameIdToRound = new Map();
-    // Round of 64: games 1-32
-    for (let i = 1; i <= 32; i++) {
-      gameIdToRound.set(i.toString(), "ROUND_64");
-    }
-    // Round of 32: games 33-48
-    for (let i = 33; i <= 48; i++) {
-      gameIdToRound.set(i.toString(), "ROUND_32");
-    }
-    // Sweet 16: games 49-56
-    for (let i = 49; i <= 56; i++) {
-      gameIdToRound.set(i.toString(), "SWEET_16");
-    }
-    // Elite 8: games 57-60
-    for (let i = 57; i <= 60; i++) {
-      gameIdToRound.set(i.toString(), "ELITE_8");
-    }
-    // Final Four: games 61-62
-    for (let i = 61; i <= 62; i++) {
-      gameIdToRound.set(i.toString(), "FINAL_FOUR");
-    }
-    // Championship: game 63
-    gameIdToRound.set("63", "CHAMPIONSHIP");
-    
-    // Get completed games
-    const completedGameIds = new Set(gameResults.map(game => game.gameId));
-    
-    // Get teams still in the tournament
-    const eliminatedTeams = new Set<string>();
-    gameResults.forEach(game => {
-      if (game.loser) {
-        eliminatedTeams.add(game.loser);
-      }
-    });
-    
-    return currentUsers.map(user => {
-      // Extract champion pick
-      let champion = '';
-      if (championshipGame && championshipGame.picks && championshipGame.picks[user.username]) {
-        champion = championshipGame.picks[user.username];
-      }
-      
-      // Calculate round scores
-      const roundScores: Record<string, number> = {
-        ROUND_64: 0,
-        ROUND_32: 0,
-        SWEET_16: 0,
-        ELITE_8: 0,
-        FINAL_FOUR: 0,
-        CHAMPIONSHIP: 0
-      };
-      
-      // Calculate max possible score
-      let maxPossibleScore = user.score;
-      
-      // Go through each game in bracket data
-      Object.entries(bracketData.games).forEach(([gameId, game]) => {
-        const round = gameIdToRound.get(gameId);
-        if (!round) return;
-        
-        const userPick = game.picks[user.username];
-        if (!userPick) return;
-        
-        // If game is completed and user picked correctly, add to round score
-        const gameResult = gameResults.find(g => g.gameId === gameId);
-        if (gameResult && gameResult.winner === userPick) {
-          const pointValue = 
-            round === "ROUND_64" ? 10 :
-            round === "ROUND_32" ? 20 :
-            round === "SWEET_16" ? 40 :
-            round === "ELITE_8" ? 80 :
-            round === "FINAL_FOUR" ? 160 : 320;
-          
-          roundScores[round] += pointValue;
-        }
-        
-        // If game is not completed and user's pick is still in tournament
-        if (!completedGameIds.has(gameId) && !eliminatedTeams.has(userPick)) {
-          const pointValue = 
-            round === "ROUND_64" ? 10 :
-            round === "ROUND_32" ? 20 :
-            round === "SWEET_16" ? 40 :
-            round === "ELITE_8" ? 80 :
-            round === "FINAL_FOUR" ? 160 : 320;
-          
-          maxPossibleScore += pointValue;
-        }
-      });
-      
+  const data = {
+    labels: ordered.map((g) => `${g.winner} over ${g.loser}`),
+    datasets: shown.map((s, i) => {
+      const color = TREND_COLORS[i % TREND_COLORS.length];
       return {
-        ...user,
-        champion,
-        roundScores,
-        maxPossibleScore
-      };
-    });
-  }, [currentUsers, bracketData, gameResults]);
-  
-  // Chart data for leaderboard trend
-  const orderedGames = useMemo(() => {
-    if (!gameResults.length) return [];
-    
-    // Sort games by their order value
-    return [...gameResults].sort((a, b) => a.order - b.order);
-  }, [gameResults]);
-  
-  const chartData = useMemo(() => {
-    if (!leaderboardTrend || leaderboardTrend.length === 0) return null;
-    
-    // Find ordered games
-    const orderedGames = [...gameResults].sort((a, b) => a.order - b.order);
-    
-    // Map order to gameId for x-axis labeling
-    const orderToGameIdMap = new Map(
-      orderedGames.map(game => [game.order, game.gameId])
-    );
-    
-    // Create datasets for each selected user (or top 10 if no selection)
-    const usersToShow = isFilterActive && selectedUsers.length > 0
-      ? selectedUsers
-      : leaderboardTrend[leaderboardTrend.length - 1].scores.slice(0, 10).map(user => user.username);
-    
-    // Create color map for consistent user colors
-    const colorMap = new Map();
-    usersToShow.forEach((username, index) => {
-      const hue = (index * 30) % 360;
-      colorMap.set(username, `hsl(${hue}, 70%, 50%)`);
-    });
-    
-    // Sort trend data by game order
-    const sortedTrend = [...leaderboardTrend].sort((a, b) => {
-      // Find the order for each gameId
-      const orderA = orderedGames.find(g => g.gameId === a.gameId)?.order || 0;
-      const orderB = orderedGames.find(g => g.gameId === b.gameId)?.order || 0;
-      return orderA - orderB;
-    });
-    
-    // Get scores at each point for selected users
-    const datasets = usersToShow.map(username => {
-      const userData = sortedTrend.map(point => {
-        const userScore = point.scores.find(s => s.username === username);
-        return userScore ? userScore.score : null;
-      });
-      
-      // Use solid colors with 70% saturation and 50% lightness
-      const color = colorMap.get(username);
-      
-      return {
-        label: username,
-        data: userData,
+        label: s.fullName,
+        data: s.history,
         borderColor: color,
         backgroundColor: color,
         borderWidth: 2,
-        pointRadius: 4,
-        pointBackgroundColor: color,
-        pointBorderColor: 'white',
-        pointHoverRadius: 6,
-        tension: 0.1,
-        fill: false
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.25,
       };
-    });
-    
-    // Create labels from game results
-    const labels = sortedTrend.map(point => {
-      const gameId = point.gameId;
-      const game = gameResults.find(g => g.gameId === gameId);
-      
-      if (game) {
-        return `${game.winner} vs ${game.loser}`;
-      }
-      return `Game ${gameId}`;
-    });
-    
-    return {
-      labels,
-      datasets
-    };
-  }, [leaderboardTrend, gameResults, selectedUsers, isFilterActive]);
-  
-  const handleSort = (key: 'score' | 'maxPossible' | 'roundScore', round?: string) => {
-    setSortConfig(prev => {
-      // If it's a new column, default to descending
-      if (prev.key !== key || prev.round !== round) {
-        return {
-          key,
-          direction: 'descending',
-          round
-        };
-      }
-      
-      // If it's the same column, toggle direction
-      return {
-        key,
-        direction: prev.direction === 'descending' ? 'ascending' : 'descending',
-        round
-      };
-    });
+    }),
   };
-  
-  // Sort users based on the current sort configuration
-  const getSortedUsers = () => {
-    return [...enhancedUserScores].sort((a, b) => {
-      let comparison = 0;
-      
-      if (sortConfig.key === 'score') {
-        comparison = a.score - b.score;
-      } else if (sortConfig.key === 'maxPossible') {
-        comparison = (a.maxPossibleScore || 0) - (b.maxPossibleScore || 0);
-      } else if (sortConfig.key === 'roundScore' && sortConfig.round) {
-        comparison = (a.roundScores?.[sortConfig.round] || 0) - (b.roundScores?.[sortConfig.round] || 0);
-      }
-      
-      return sortConfig.direction === 'ascending' ? comparison : -comparison;
+
+  return (
+    <Box>
+      <Typography sx={{ color: tokens.muted, fontSize: '0.875rem', mb: 2 }}>
+        {group.length ? `Your group of ${group.length}` : `Top ${shown.length}`} · cumulative points after each game
+      </Typography>
+      <Box sx={{ height: { xs: 360, md: 480 } }}>
+        <Line
+          data={data}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 14, font: { family: 'Inter' } },
+              },
+              tooltip: {
+                itemSort: (a, b) => (b.parsed.y ?? 0) - (a.parsed.y ?? 0),
+                titleFont: { family: 'Inter' },
+                bodyFont: { family: 'Inter' },
+              },
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  font: { family: 'Inter', size: 11 },
+                  color: tokens.muted,
+                  maxRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: 8,
+                  callback: (_, index) => `G${index + 1}`,
+                },
+              },
+              y: {
+                grid: { color: tokens.divider },
+                border: { display: false },
+                ticks: { font: { family: 'Inter', size: 11 }, color: tokens.muted },
+              },
+            },
+          }}
+        />
+      </Box>
+    </Box>
+  );
+};
+
+/* ---------- page ---------- */
+
+const Leaderboard = () => {
+  const { loading, error } = useData();
+  const { yearPath } = useYearPath();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { standings } = usePoolStandings(1);
+
+  const [view, setView] = useState<View>('standings');
+  const [search, setSearch] = useState('');
+  const [round, setRound] = useState<RoundKey | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [group, setGroup] = useState<string[]>(() => {
+    const param = new URLSearchParams(location.search).get('users');
+    return param ? param.split(',').filter(Boolean) : [];
+  });
+  const [groupOnly, setGroupOnly] = useState(() => new URLSearchParams(location.search).has('users'));
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [visible, setVisible] = useState(PAGE_SIZE);
+  const [copied, setCopied] = useState(false);
+  const [menu, setMenu] = useState<{ type: 'members' | 'rounds' | 'sort'; anchor: HTMLElement } | null>(null);
+
+  useEffect(() => {
+    if (standings[0] && expanded.size === 0) setExpanded(new Set([standings[0].username]));
+    // Only seed the default expansion once data arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [standings.length]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (groupOnly && group.length) params.set('users', group.join(','));
+    else params.delete('users');
+    const next = params.toString();
+    if (next !== location.search.replace(/^\?/, '')) {
+      navigate({ search: next ? `?${next}` : '' }, { replace: true });
+    }
+  }, [group, groupOnly, location.search, navigate]);
+
+  useEffect(() => setVisible(PAGE_SIZE), [search, round, sortKey, groupOnly]);
+
+  const groupSet = useMemo(() => new Set(group), [group]);
+  const groupStandings = useMemo(() => standings.filter((s) => groupSet.has(s.username)), [standings, groupSet]);
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = groupOnly && group.length ? groupStandings : standings;
+    if (q) {
+      list = list.filter(
+        (s) => s.fullName.toLowerCase().includes(q) || s.bracketName.toLowerCase().includes(q) || s.username.toLowerCase().includes(q)
+      );
+    }
+    const sorted = [...list];
+    if (round) {
+      sorted.sort((a, b) => b.roundScores[round] - a.roundScores[round] || a.rank - b.rank);
+    } else if (sortKey === 'maxPossible') {
+      sorted.sort((a, b) => b.maxPossible - a.maxPossible || a.rank - b.rank);
+    } else if (sortKey === 'movers') {
+      sorted.sort((a, b) => b.rankChange - a.rankChange || a.rank - b.rank);
+    } else if (sortKey === 'name') {
+      sorted.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    }
+    return sorted;
+  }, [standings, groupStandings, groupOnly, group.length, search, round, sortKey]);
+
+  const toggleExpanded = (username: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(username)) next.delete(username);
+      else next.add(username);
+      return next;
     });
+
+  const toggleGroup = (username: string) =>
+    setGroup((prev) => (prev.includes(username) ? prev.filter((u) => u !== username) : [...prev, username]));
+
+  const copyGroupLink = () => {
+    const url = `${window.location.origin}${location.pathname}?users=${group.map(encodeURIComponent).join(',')}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
   };
-  
-  const sortedUsers = getSortedUsers();
-  
+
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', height: '300px', alignItems: 'center' }}>
-        <CircularProgress size={60} />
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 320 }}>
+        <CircularProgress />
       </Box>
     );
   }
 
   if (error) {
     return (
-      <Box sx={{ textAlign: 'center', py: 5, px: 3 }}>
-        <Typography variant="h2" color="error" gutterBottom>
-          Error
+      <Box sx={{ textAlign: 'center', py: 8 }}>
+        <Typography variant="h5" color="error" gutterBottom>
+          Something went wrong
         </Typography>
-        <Typography variant="body1" sx={{ mt: 2, mb: 4 }}>
-          {error}
-        </Typography>
+        <Typography color="text.secondary">{error}</Typography>
       </Box>
     );
   }
-  
+
+  const membersLabel = groupOnly && group.length ? `My group (${group.length})` : 'All members';
+  const closeMenu = () => setMenu(null);
+
   return (
-    <Box>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ fontSize: { xs: '2.25rem', sm: '2.75rem' } }}>
-        March Madness Leaderboard
+    <Box sx={{ maxWidth: 960 }}>
+      <Typography component="h1" sx={{ fontSize: { xs: '2rem', md: '2.6rem' }, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1, mb: 2.5 }}>
+        Leaderboard
       </Typography>
-      
-      <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 2 }}>
-        <Tab label="Leaderboard" id="leaderboard-tab-0" aria-controls="leaderboard-tabpanel-0" />
-        <Tab label="Leaderboard Trend" id="leaderboard-tab-1" aria-controls="leaderboard-tabpanel-1" />
-      </Tabs>
-      
-      <TabPanel value={tabValue} index={0}>
-        <Box sx={{ mb: 3 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                variant="outlined"
-                placeholder="Search by username, bracket name, or real name..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
-                justifyContent={{ xs: 'flex-start', md: 'flex-end' }}
-                alignItems={{ xs: 'stretch', sm: 'center' }}
-              >
-                <FormControlLabel
-                  sx={{ mr: 0 }}
-                  control={
-                    <Switch
-                      checked={isFilterActive}
-                      onChange={handleToggleFilter}
-                      color="primary"
-                    />
-                  }
-                  label={isFilterActive ? "Filtered View" : "All Users"}
-                />
-                
-                <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
-                  <Select
-                    value="expanded"
-                    displayEmpty
-                  >
-                    <MenuItem value="expanded">Expanded View</MenuItem>
-                  </Select>
-                </FormControl>
-                
-                <Button
-                  variant="outlined"
-                  onClick={createShareableLink}
-                  startIcon={<ContentCopyIcon />}
-                  disabled={selectedUsers.length === 0}
-                  sx={{ width: { xs: '100%', sm: 'auto' } }}
-                >
-                  <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
-                    Share Group Link
-                  </Box>
-                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                    Create Shareable Group Link
-                  </Box>
-                </Button>
-              </Stack>
-            </Grid>
-          </Grid>
-        </Box>
-        
-        {isMobile ? (
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, textAlign: 'right' }}>
-              Swipe for champ & bracket · Rank & points stay visible
-            </Typography>
-            <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto', mx: -1 }}>
-              <Table aria-label="mobile leaderboard table" size="small" sx={{ minWidth: 540 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell
-                      sx={{
-                        position: 'sticky',
-                        left: 0,
-                        zIndex: 3,
-                        backgroundColor: 'background.paper',
-                        minWidth: 22,
-                        pl: 0,
-                        pr: 0.125
-                      }}
-                    >
-                      Rank
-                    </TableCell>
-                    <TableCell sx={{ minWidth: 38, pl: 0.125, pr: 0.125 }}>
-                      Champ
-                    </TableCell>
-                    <TableCell
-                      sx={{ minWidth: 156, maxWidth: 180, px: 0.125, pr: 0 }}
-                    >
-                      Bracket
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{
-                        minWidth: 38,
-                        px: 0,
-                        pl: 0,
-                        cursor: 'pointer',
-                        position: 'sticky',
-                        right: MOBILE_LB_STICKY_PTS_RIGHT,
-                        zIndex: 4,
-                        backgroundColor: 'background.paper',
-                        boxShadow: (theme) =>
-                          `-10px 0 14px -6px ${
-                            theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.12)'
-                          }`
-                      }}
-                      onClick={() => handleSort('score')}
-                    >
-                      Pts {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{
-                        minWidth: MOBILE_LB_PICK_W,
-                        width: MOBILE_LB_PICK_W,
-                        px: 0.25,
-                        position: 'sticky',
-                        right: MOBILE_LB_MORE_W,
-                        zIndex: 4,
-                        backgroundColor: 'background.paper'
-                      }}
-                    >
-                      Pick
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{
-                        minWidth: MOBILE_LB_MORE_W,
-                        width: MOBILE_LB_MORE_W,
-                        px: 0.25,
-                        position: 'sticky',
-                        right: 0,
-                        zIndex: 4,
-                        backgroundColor: 'background.paper'
-                      }}
-                    >
-                      More
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {sortedUsers.map((user, index) => {
-                    const isExpanded = expandedUsers.includes(user.username);
-                    const rank = getRank(index, sortedUsers);
-                    const recentPerformance = getRecentPerformance.get(user.username) || 0;
-                    const rowSelected = selectedUsers.includes(user.username);
-                    const mobileStickyBg = rowSelected ? 'rgba(25, 118, 210, 0.08)' : 'background.paper';
 
-                    return (
-                      <React.Fragment key={user.username}>
-                        <TableRow
-                          hover
-                          sx={{
-                            backgroundColor: rowSelected ? 'rgba(25, 118, 210, 0.08)' : 'inherit'
-                          }}
-                        >
-                          <TableCell
-                            sx={{
-                              position: 'sticky',
-                              left: 0,
-                              zIndex: 2,
-                              backgroundColor: 'background.paper',
-                              minWidth: 22,
-                              pl: 0,
-                              pr: 0.125
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0, whiteSpace: 'nowrap' }}>
-                              {rank}
-                              {recentPerformance >= 4 && <span title="Perfect in last 4 games">🔥</span>}
-                              {recentPerformance <= 1 && <span title="1 or 0 correct in last 4 games">❄️</span>}
-                            </Box>
-                          </TableCell>
-                          <TableCell sx={{ pl: 0.125, pr: 0.125 }}>
-                            {user.champion ? (
-                              <Button
-                                component={RouterLink}
-                                to={yearPath(`/teams/${user.champion}`)}
-                                size="small"
-                                sx={{ textTransform: 'none', px: 0, py: 0, minWidth: 0, fontSize: '0.8rem', lineHeight: 1.1 }}
-                              >
-                                {user.champion}
-                              </Button>
-                            ) : '-'}
-                          </TableCell>
-                          <TableCell
-                            sx={{
-                              px: 0.125,
-                              pr: 0,
-                              minWidth: 156,
-                              maxWidth: 180,
-                              verticalAlign: 'middle'
-                            }}
-                          >
-                            <Typography
-                              variant="body2"
-                              noWrap
-                              sx={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                maxWidth: '100%'
-                              }}
-                            >
-                              {user.bracketName || user.username}
-                            </Typography>
-                            <Button
-                              component={RouterLink}
-                              to={yearPath(`/users/${user.username}`)}
-                              size="small"
-                              sx={{
-                                textTransform: 'none',
-                                px: 0,
-                                py: 0,
-                                minWidth: 0,
-                                maxWidth: '100%',
-                                justifyContent: 'flex-start',
-                                display: 'block'
-                              }}
-                            >
-                              <Typography
-                                variant="caption"
-                                noWrap
-                                sx={{
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  maxWidth: '100%',
-                                  display: 'block',
-                                  textAlign: 'left'
-                                }}
-                              >
-                                @{user.username}
-                              </Typography>
-                            </Button>
-                          </TableCell>
-                          <TableCell
-                            align="right"
-                            sx={{
-                              px: 0,
-                              pl: 0,
-                              position: 'sticky',
-                              right: MOBILE_LB_STICKY_PTS_RIGHT,
-                              zIndex: 2,
-                              backgroundColor: mobileStickyBg,
-                              boxShadow: (theme) =>
-                                `-10px 0 14px -6px ${
-                                  theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.12)'
-                                }`
-                            }}
-                          >
-                            {user.score}
-                          </TableCell>
-                          <TableCell
-                            align="right"
-                            sx={{
-                              px: 0.25,
-                              position: 'sticky',
-                              right: MOBILE_LB_MORE_W,
-                              zIndex: 2,
-                              backgroundColor: mobileStickyBg,
-                              minWidth: MOBILE_LB_PICK_W,
-                              width: MOBILE_LB_PICK_W
-                            }}
-                          >
-                            <Switch
-                              size="small"
-                              checked={selectedUsers.includes(user.username)}
-                              onChange={() => toggleUserSelection(user.username)}
-                              color="primary"
-                            />
-                          </TableCell>
-                          <TableCell
-                            align="right"
-                            sx={{
-                              px: 0.25,
-                              position: 'sticky',
-                              right: 0,
-                              zIndex: 2,
-                              backgroundColor: mobileStickyBg,
-                              minWidth: MOBILE_LB_MORE_W,
-                              width: MOBILE_LB_MORE_W
-                            }}
-                          >
-                            <IconButton
-                              size="small"
-                              onClick={() => toggleUserExpanded(user.username)}
-                              aria-expanded={isExpanded}
-                              aria-label="show details"
-                            >
-                              {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
+      <Segmented value={view} onChange={setView} />
 
-                        <TableRow>
-                          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
-                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                              <Box sx={{ margin: 1 }}>
-                                <Typography variant="subtitle2" gutterBottom component="div">
-                                  Round Scores for {user.bracketName || user.username}
-                                </Typography>
-                                <TableContainer>
-                                  <Table size="small" aria-label="round scores">
-                                    <TableHead>
-                                      <TableRow>
-                                        <TableCell>Round</TableCell>
-                                        <TableCell align="right">Score</TableCell>
-                                        <TableCell align="right">Points Possible</TableCell>
-                                      </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                      {user.roundScores && Object.entries(user.roundScores).map(([round, score]) => (
-                                        <TableRow key={round}>
-                                          <TableCell component="th" scope="row">
-                                            {getRoundDisplayName(round)}
-                                          </TableCell>
-                                          <TableCell align="right">{score}</TableCell>
-                                          <TableCell align="right">
-                                            {ROUNDS[round as keyof typeof ROUNDS]?.length *
-                                              (round === 'ROUND_64' ? 10 :
-                                                round === 'ROUND_32' ? 20 :
-                                                  round === 'SWEET_16' ? 40 :
-                                                    round === 'ELITE_8' ? 80 :
-                                                      round === 'FINAL_FOUR' ? 160 : 320)}
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </TableContainer>
-                              </Box>
-                            </Collapse>
-                          </TableCell>
-                        </TableRow>
-                      </React.Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        ) : (
-          <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
-            <Table aria-label="leaderboard table">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Rank</TableCell>
-                  <TableCell>Username</TableCell>
-                  <TableCell>Bracket Name</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell 
-                    align="right" 
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('score')}
-                  >
-                    Score {sortConfig.key === 'score' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('maxPossible')}
-                  >
-                    Max Possible {sortConfig.key === 'maxPossible' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('roundScore', 'ROUND_64')}
-                  >
-                    R64 {sortConfig.key === 'roundScore' && sortConfig.round === 'ROUND_64' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('roundScore', 'ROUND_32')}
-                  >
-                    R32 {sortConfig.key === 'roundScore' && sortConfig.round === 'ROUND_32' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('roundScore', 'SWEET_16')}
-                  >
-                    S16 {sortConfig.key === 'roundScore' && sortConfig.round === 'SWEET_16' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('roundScore', 'ELITE_8')}
-                  >
-                    E8 {sortConfig.key === 'roundScore' && sortConfig.round === 'ELITE_8' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('roundScore', 'FINAL_FOUR')}
-                  >
-                    FF {sortConfig.key === 'roundScore' && sortConfig.round === 'FINAL_FOUR' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => handleSort('roundScore', 'CHAMPIONSHIP')}
-                  >
-                    CH {sortConfig.key === 'roundScore' && sortConfig.round === 'CHAMPIONSHIP' && (sortConfig.direction === 'ascending' ? '↑' : '↓')}
-                  </TableCell>
-                  <TableCell align="right">Champion</TableCell>
-                  <TableCell align="right">Select</TableCell>
-                  <TableCell align="right">Details</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sortedUsers.map((user, index) => {
-                  const isExpanded = expandedUsers.includes(user.username);
-                  const rank = getRank(index, sortedUsers);
-                  // Only show medal emoji for top score, regardless of sort type
-                  const showEmoji = rank === 1 && sortConfig.key === 'score' && sortConfig.direction === 'ascending';
-                  // Updated performance criteria for fire/ice emoji
-                  const recentPerformance = getRecentPerformance.get(user.username) || 0;
-                  
-                  return (
-                    <React.Fragment key={user.username}>
-                      <TableRow
-                        hover
-                        sx={{
-                          backgroundColor: selectedUsers.includes(user.username) 
-                            ? 'rgba(25, 118, 210, 0.08)' 
-                            : 'inherit'
-                        }}
-                      >
-                        <TableCell>
-                          {showEmoji ? (
-                            <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'gold' }}>
-                              🥇 {rank}
-                            </Typography>
-                          ) : (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {rank}
-                              {recentPerformance >= 4 && <span title="Perfect in last 4 games">🔥</span>}
-                              {recentPerformance <= 1 && <span title="1 or 0 correct in last 4 games">❄️</span>}
-                            </Box>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            component={RouterLink} 
-                            to={yearPath(`/users/${user.username}`)}
-                            size="small" 
-                            sx={{ textTransform: 'none' }}
-                          >
-                            {user.username}
-                          </Button>
-                        </TableCell>
-                        <TableCell>{user.bracketName || user.username}</TableCell>
-                        <TableCell>{user.fullName || user.username}</TableCell>
-                        <TableCell align="right">{user.score}</TableCell>
-                        <TableCell align="right">
-                          {user.maxPossibleScore !== undefined ? user.maxPossibleScore : '-'}
-                        </TableCell>
-                        <TableCell align="right">{user.roundScores?.ROUND_64 || 0}</TableCell>
-                        <TableCell align="right">{user.roundScores?.ROUND_32 || 0}</TableCell>
-                        <TableCell align="right">{user.roundScores?.SWEET_16 || 0}</TableCell>
-                        <TableCell align="right">{user.roundScores?.ELITE_8 || 0}</TableCell>
-                        <TableCell align="right">{user.roundScores?.FINAL_FOUR || 0}</TableCell>
-                        <TableCell align="right">{user.roundScores?.CHAMPIONSHIP || 0}</TableCell>
-                        <TableCell align="right">
-                          {user.champion ? (
-                            <TooltipComponent title={`${user.username}'s champion pick`}>
-                              <Button 
-                                component={RouterLink} 
-                                to={yearPath(`/teams/${user.champion}`)}
-                                size="small" 
-                                variant="text"
-                              >
-                                {user.champion}
-                              </Button>
-                            </TooltipComponent>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Switch
-                            size="small"
-                            checked={selectedUsers.includes(user.username)}
-                            onChange={() => toggleUserSelection(user.username)}
-                            color="primary"
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <IconButton
-                            size="small"
-                            onClick={() => toggleUserExpanded(user.username)}
-                            aria-expanded={isExpanded}
-                            aria-label="show details"
-                          >
-                            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                      
-                      <TableRow>
-                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={15}>
-                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                            <Box sx={{ margin: 1 }}>
-                              <Typography variant="subtitle2" gutterBottom component="div">
-                                Round Scores for {user.bracketName || user.username}
-                              </Typography>
-                              <TableContainer>
-                                <Table size="small" aria-label="round scores">
-                                  <TableHead>
-                                    <TableRow>
-                                      <TableCell>Round</TableCell>
-                                      <TableCell align="right">Score</TableCell>
-                                      <TableCell align="right">Points Possible</TableCell>
-                                    </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {user.roundScores && Object.entries(user.roundScores).map(([round, score]) => (
-                                      <TableRow key={round}>
-                                        <TableCell component="th" scope="row">
-                                          {getRoundDisplayName(round)}
-                                        </TableCell>
-                                        <TableCell align="right">{score}</TableCell>
-                                        <TableCell align="right">
-                                          {ROUNDS[round as keyof typeof ROUNDS]?.length * 
-                                           (round === 'ROUND_64' ? 10 : 
-                                            round === 'ROUND_32' ? 20 :
-                                            round === 'SWEET_16' ? 40 :
-                                            round === 'ELITE_8' ? 80 :
-                                            round === 'FINAL_FOUR' ? 160 : 320)}
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </TableContainer>
-                            </Box>
-                          </Collapse>
-                        </TableCell>
-                      </TableRow>
-                    </React.Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2.5, mb: 1, flexWrap: 'wrap' }}>
+        <FilterChip label={membersLabel} active={groupOnly && group.length > 0} onClick={(e) => setMenu({ type: 'members', anchor: e.currentTarget })} />
+        {view === 'standings' && (
+          <>
+            <FilterChip label={round ? ROUND_LABELS[round].long : 'All rounds'} active={!!round} onClick={(e) => setMenu({ type: 'rounds', anchor: e.currentTarget })} />
+            <Box sx={{ flexGrow: 1, minWidth: 8 }} />
+            <FilterChip label={round ? 'Round points' : SORT_LABELS[sortKey]} icon={<SwapVertIcon />} onClick={(e) => setMenu({ type: 'sort', anchor: e.currentTarget })} />
+          </>
         )}
-      </TabPanel>
-      
-      <TabPanel value={tabValue} index={1}>
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Score Progression Over Games
-                </Typography>
-                
-                {chartData ? (
-                  <Box sx={{ height: 500 }}>
-                    <Line
-                      data={chartData}
-                      options={{
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                          tooltip: {
-                            callbacks: {
-                              title: function(tooltipItems) {
-                                const gameIndex = tooltipItems[0].dataIndex;
-                                return chartData.labels[gameIndex];
-                              }
-                            }
-                          },
-                          legend: {
-                            position: 'top',
-                          },
-                        },
-                        scales: {
-                          x: {
-                            title: {
-                              display: true,
-                              text: 'Games in Order Played'
-                            }
-                          },
-                          y: {
-                            title: {
-                              display: true,
-                              text: 'Score'
-                            },
-                            beginAtZero: true
-                          }
-                        }
-                      }}
-                    />
-                  </Box>
-                ) : (
-                  <Box sx={{ display: 'flex', height: 300, alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography variant="body1">No trend data available</Typography>
-                  </Box>
-                )}
-                
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                  {isFilterActive && selectedUsers.length > 0 
-                    ? `Showing score progression for ${selectedUsers.length} selected users.` 
-                    : "Showing score progression for top 10 users. Select specific users from the leaderboard to compare them."}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </TabPanel>
-      
-      <Snackbar
-        open={alertOpen}
-        autoHideDuration={4000}
-        onClose={handleAlertClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleAlertClose} severity="success" sx={{ width: '100%' }}>
-          Link copied to clipboard!
+      </Box>
+
+      {view === 'standings' ? (
+        <>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search people or brackets"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ mt: 1, mb: 1, '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: tokens.subtle }} />
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          {group.length > 0 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1, flexWrap: 'wrap' }}>
+              <Typography sx={{ fontSize: '0.875rem', color: tokens.muted, mr: 'auto' }}>
+                {group.length} {group.length === 1 ? 'person' : 'people'} in your group
+              </Typography>
+              <Button size="small" onClick={() => setGroupOnly((v) => !v)}>
+                {groupOnly ? 'Show everyone' : 'Show group only'}
+              </Button>
+              <Button size="small" startIcon={<ContentCopyIcon />} onClick={copyGroupLink}>
+                Copy link
+              </Button>
+              <Button size="small" color="inherit" onClick={() => { setGroup([]); setGroupOnly(false); }}>
+                Clear
+              </Button>
+            </Box>
+          )}
+
+          <Box sx={{ borderTop: `1px solid ${tokens.border}` }}>
+            {rows.slice(0, visible).map((s) => (
+              <StandingRow
+                key={s.username}
+                standing={s}
+                round={round}
+                expanded={expanded.has(s.username)}
+                inGroup={groupSet.has(s.username)}
+                onToggleExpand={() => toggleExpanded(s.username)}
+                onToggleGroup={() => toggleGroup(s.username)}
+                userPath={yearPath(`/users/${encodeURIComponent(s.username)}`)}
+              />
+            ))}
+          </Box>
+
+          {rows.length === 0 && (
+            <Typography sx={{ color: tokens.muted, textAlign: 'center', py: 6 }}>No brackets match “{search}”.</Typography>
+          )}
+          {rows.length > visible && (
+            <Box sx={{ textAlign: 'center', mt: 3 }}>
+              <Button variant="outlined" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
+                Show more ({fmt(rows.length - visible)} left)
+              </Button>
+            </Box>
+          )}
+        </>
+      ) : (
+        <Box sx={{ mt: 2 }}>
+          <ScoreTrend standings={standings} group={groupStandings} />
+          {!group.length && (
+            <Typography sx={{ color: tokens.muted, fontSize: '0.85rem', mt: 2 }}>
+              Tip: open anyone in{' '}
+              <Link component="button" onClick={() => setView('standings')} sx={{ fontSize: 'inherit', verticalAlign: 'baseline' }}>
+                Standings
+              </Link>{' '}
+              and tap “Add to group” to chart your own comparison.
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      <Menu anchorEl={menu?.anchor} open={!!menu} onClose={closeMenu} PaperProps={{ variant: 'outlined', sx: { mt: 0.5, minWidth: 200 } }}>
+        {menu?.type === 'members' && [
+          <MenuItem key="all" onClick={() => { setGroupOnly(false); closeMenu(); }}>
+            <ListItemIcon>{!(groupOnly && group.length) && <CheckIcon fontSize="small" />}</ListItemIcon>
+            All members
+          </MenuItem>,
+          <MenuItem key="group" disabled={!group.length} onClick={() => { setGroupOnly(true); closeMenu(); }}>
+            <ListItemIcon>{groupOnly && group.length > 0 && <CheckIcon fontSize="small" />}</ListItemIcon>
+            My group {group.length ? `(${group.length})` : '(add people first)'}
+          </MenuItem>,
+        ]}
+        {menu?.type === 'rounds' &&
+          [null, ...ROUND_ORDER].map((r) => (
+            <MenuItem key={r ?? 'all'} onClick={() => { setRound(r); closeMenu(); }}>
+              <ListItemIcon>{round === r && <CheckIcon fontSize="small" />}</ListItemIcon>
+              {r ? ROUND_LABELS[r].long : 'All rounds'}
+            </MenuItem>
+          ))}
+        {menu?.type === 'sort' &&
+          (Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+            <MenuItem key={k} disabled={!!round} onClick={() => { setSortKey(k); closeMenu(); }}>
+              <ListItemIcon>{!round && sortKey === k && <CheckIcon fontSize="small" />}</ListItemIcon>
+              {SORT_LABELS[k]}
+            </MenuItem>
+          ))}
+      </Menu>
+
+      <Snackbar open={copied} autoHideDuration={2500} onClose={() => setCopied(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} sx={{ bottom: { xs: 88, md: 24 } }}>
+        <Alert severity="success" variant="filled" onClose={() => setCopied(false)}>
+          Group link copied
         </Alert>
       </Snackbar>
     </Box>
   );
 };
 
-export default Leaderboard; 
+export default Leaderboard;
