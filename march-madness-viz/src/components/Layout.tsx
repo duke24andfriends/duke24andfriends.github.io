@@ -161,9 +161,16 @@ const Layout = ({ children, year }: { children: ReactNode; year: string }) => {
   const hasBracketMachine = year === '2026';
   const subPath = location.pathname.replace(new RegExp(`^/${year}`), '') || '/';
 
+  const isStandingsPath = (p: string) => p.startsWith('/leaderboard') || p.startsWith('/users');
+  const overviewItem: NavItem = {
+    name: 'Overview',
+    path: getYearPath(year, '/'),
+    match: (p) => p === '/' || isStandingsPath(p),
+  };
+  const leaderboardItem: NavItem = { name: 'Leaderboard', path: getYearPath(year, '/leaderboard'), match: isStandingsPath };
+
   const navItems: NavItem[] = [
-    { name: 'Overview', path: getYearPath(year, '/'), match: (p) => p === '/' },
-    { name: 'Leaderboard', path: getYearPath(year, '/leaderboard'), match: (p) => p.startsWith('/leaderboard') || p.startsWith('/users') },
+    overviewItem,
     { name: 'Round Analysis', path: getYearPath(year, `/rounds/${mostRecentRound}`), match: (p) => p.startsWith('/rounds') || p.startsWith('/games') },
     { name: 'Team Analysis', path: getYearPath(year, '/teams/DUKE'), match: (p) => p.startsWith('/teams') },
     { name: 'Pool Analysis', path: getYearPath(year, '/pool-analysis'), match: (p) => p.startsWith('/pool-analysis') },
@@ -177,11 +184,11 @@ const Layout = ({ children, year }: { children: ReactNode; year: string }) => {
     navigate(getYearPath(nextYear, keepPath ? subPath : '/') + location.search);
   };
 
-  const [overview, leaderboard, rounds] = navItems;
+  const rounds = navItems[1];
   const bracketItem = navItems.find((i) => i.name === 'Bracket Machine') ?? rounds;
   const mobileTabs = [
-    { ...overview, label: 'Overview', icon: <HomeOutlinedIcon /> },
-    { ...leaderboard, label: 'Standings', icon: <BarChartIcon /> },
+    { ...overviewItem, match: (p: string) => p === '/', label: 'Overview', icon: <HomeOutlinedIcon /> },
+    { ...leaderboardItem, label: 'Standings', icon: <BarChartIcon /> },
     { ...bracketItem, label: hasBracketMachine ? 'Bracket' : 'Rounds', icon: <AccountTreeOutlinedIcon /> },
   ];
   const moreItems = navItems.filter((i) => !mobileTabs.some((t) => t.name === i.name));

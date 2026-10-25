@@ -39,6 +39,7 @@ import {
 import { useData } from '../context/DataContext';
 import { ROUNDS, getRoundNameFromGameId, getPointsForGame } from '../types';
 import { useYearPath } from '../utils/yearRouting';
+import PageTitle from '../components/ui/PageTitle';
 
 // Register Chart.js components
 ChartJS.register(
@@ -286,9 +287,10 @@ const GamePage = () => {
   
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Game {gameId}: {getGameTeamsDisplay()}
-      </Typography>
+      <PageTitle>
+        <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600, mr: 1.5 }}>Game {gameId}</Box>
+        {getGameTeamsDisplay()}
+      </PageTitle>
       
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={6}>

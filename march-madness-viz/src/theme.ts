@@ -56,6 +56,14 @@ const theme = createTheme({
     },
     MuiCard: {
       defaultProps: { variant: 'outlined' },
+      styleOverrides: { root: { borderRadius: 12 } },
+    },
+    MuiCardHeader: {
+      defaultProps: {
+        titleTypographyProps: { fontSize: '1.1rem', fontWeight: 700, letterSpacing: '-0.01em' },
+        subheaderTypographyProps: { fontSize: '0.85rem' },
+      },
+      styleOverrides: { root: { paddingBottom: 4 } },
     },
     MuiTableCell: {
       styleOverrides: {

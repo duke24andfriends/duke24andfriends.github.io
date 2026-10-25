@@ -1,826 +1,366 @@
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
-  Typography,
-  Card,
-  CardContent,
-  CardHeader,
-  Grid,
   CircularProgress,
-  Stack,
+  Link,
+  MenuItem,
+  Select,
   Table,
+  TableBody,
+  TableCell,
   TableContainer,
   TableHead,
-  TableBody,
   TableRow,
-  TableCell,
-  Paper,
-  Chip,
-  Button,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Switch,
-  Link,
-  Tab,
-  Tabs
+  TableSortLabel,
+  Typography,
 } from '@mui/material';
-import { Bar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-} from 'chart.js';
-import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import { ROUNDS } from '../types';
 import { useYearPath } from '../utils/yearRouting';
-import {
-  formatMatchupSlotLabel,
-  getRoundPageMatchupSlots,
-  type MatchupSlot
-} from '../utils/bracketLogic';
+import { getRoundPageMatchupSlots, type MatchupSlot } from '../utils/bracketLogic';
+import { ROUND_LABELS, ROUND_ORDER, RoundKey } from '../hooks/usePoolStandings';
+import PageTitle, { SectionHeading } from '../components/ui/PageTitle';
+import SegmentedControl from '../components/ui/SegmentedControl';
+import Meter from '../components/ui/Meter';
+import { tokens } from '../theme';
 
-/** Match table cell text: inherit TableCell body2, links match each other (underline on hover only). */
-const matchupTableLinkSx = {
-  fontSize: 'inherit',
-  fontFamily: 'inherit',
-  lineHeight: 'inherit',
-  verticalAlign: 'baseline'
-} as const;
+type View = 'games' | 'users';
+type SortKey = 'game' | 'winner' | 'correct' | 'accuracy';
 
-const matchupTableMutedSx = {
-  fontSize: 'inherit',
-  fontFamily: 'inherit',
-  lineHeight: 'inherit',
-  color: 'text.secondary',
-  verticalAlign: 'baseline'
-} as const;
+interface GameRow {
+  gameId: string;
+  slots: [MatchupSlot, MatchupSlot] | null;
+  completed: boolean;
+  winner: string;
+  loser: string;
+  winnerSeed: number | null;
+  loserSeed: number | null;
+  correct: number;
+  total: number;
+  accuracy: number;
+  distribution: Record<string, number>;
+}
 
-function MatchupSlotDisplay({
-  slot,
-  yearPathFn
-}: {
-  slot: MatchupSlot;
-  yearPathFn: (path: string) => string;
-}) {
-  if (slot.type === 'team') {
-    return (
-      <Link
-        component={RouterLink}
-        to={yearPathFn(`/teams/${slot.code}`)}
-        underline="hover"
-        sx={matchupTableLinkSx}
-      >
-        {slot.code}
-      </Link>
-    );
-  }
-  /* No whitespace between </Typography> and <Link> avoids a double space after "of" */
-  return (
-    <Box component="span" sx={{ display: 'inline', whiteSpace: 'normal' }}>
-      <Typography component="span" sx={matchupTableMutedSx}>Winner of </Typography>
-      <Link
-        component={RouterLink}
-        to={yearPathFn(`/games/${slot.feederGameId}`)}
-        underline="hover"
-        sx={matchupTableLinkSx}
-      >
+const HIGHLIGHT_COUNT = 5;
+const fmt = (n: number) => n.toLocaleString();
+
+const TeamLink = ({ code, seed, yearPath, bold }: { code: string; seed?: number | null; yearPath: (p: string) => string; bold?: boolean }) => (
+  <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+    {seed ? (
+      <Box component="span" sx={{ color: tokens.muted, fontSize: '0.8em', mr: 0.75 }}>
+        {seed}
+      </Box>
+    ) : null}
+    <Link component={RouterLink} to={yearPath(`/teams/${code}`)} underline="hover" color="inherit" sx={{ fontWeight: bold ? 600 : 400 }}>
+      {code}
+    </Link>
+  </Box>
+);
+
+const Slot = ({ slot, yearPath }: { slot: MatchupSlot; yearPath: (p: string) => string }) =>
+  slot.type === 'team' ? (
+    <TeamLink code={slot.code} yearPath={yearPath} />
+  ) : (
+    <Box component="span" sx={{ color: tokens.muted }}>
+      Winner of{' '}
+      <Link component={RouterLink} to={yearPath(`/games/${slot.feederGameId}`)} underline="hover">
         Game {slot.feederGameId}
       </Link>
     </Box>
   );
-}
 
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
+const Stat = ({ value, label, detail }: { value: string; label: string; detail: string }) => (
+  <Box sx={{ pr: { xs: 2, sm: 4 }, mr: { xs: 2, sm: 4 }, borderRight: `1px solid ${tokens.border}`, '&:last-of-type': { borderRight: 'none', mr: 0, pr: 0 } }}>
+    <Typography sx={{ fontSize: { xs: '1.6rem', md: '2rem' }, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.15 }}>{value}</Typography>
+    <Typography sx={{ fontSize: '0.95rem', color: tokens.ink }}>{label}</Typography>
+    <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>{detail}</Typography>
+  </Box>
 );
 
-interface RouteParams {
-  roundId: string;
-}
-
-// Helper to ensure round ID is valid
-function getValidRoundId(roundId: string): string {
-  const validRounds = Object.keys(ROUNDS);
-  return validRounds.includes(roundId) ? roundId : 'ROUND_64';
-}
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`round-tabpanel-${index}`}
-      aria-labelledby={`round-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
-
 const RoundPage = () => {
-  const { roundId } = useParams<keyof RouteParams>() as RouteParams;
+  const { roundId } = useParams();
   const navigate = useNavigate();
   const { yearPath } = useYearPath();
-  const { bracketData, gameWinners, gameResults, roundAccuracy, loading, error } = useData();
-  const theme = useTheme();
-  const isNarrowScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const { bracketData, gameWinners, gameResults, loading, error } = useData();
+  const [view, setView] = useState<View>('games');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'accuracy', dir: 'desc' });
 
-  const [selectedGame, setSelectedGame] = useState<string | null>(null);
-  const [sortByAccuracy, setSortByAccuracy] = useState<boolean>(true);
-  const [viewMode, setViewMode] = useState<'game' | 'user'>('game');
-  
-  // Format round name for display
-  const displayRoundName = (roundKey: string) => {
-    switch (roundKey) {
-      case 'ROUND_64': return 'Round of 64';
-      case 'ROUND_32': return 'Round of 32';
-      case 'SWEET_16': return 'Sweet 16';
-      case 'ELITE_8': return 'Elite 8';
-      case 'FINAL_FOUR': return 'Final Four';
-      case 'CHAMPIONSHIP': return 'Championship';
-      default: return roundKey.replace('_', ' ');
-    }
-  };
-  
-  // Ensure we have a valid round ID
-  const currentRoundId = getValidRoundId(roundId);
-  
-  // Get the games for this round
-  const currentRoundGames = ROUNDS[currentRoundId as keyof typeof ROUNDS] || [];
+  const round: RoundKey = ROUND_ORDER.includes(roundId as RoundKey) ? (roundId as RoundKey) : 'ROUND_64';
+  const roundGames = ROUNDS[round];
+
+  const rows = useMemo<GameRow[]>(() => {
+    if (!bracketData) return [];
+    return roundGames
+      .filter((id) => bracketData.games[id])
+      .map((gameId) => {
+        const game = bracketData.games[gameId];
+        const winner = gameWinners.find((w) => w.gameId === gameId)?.winner ?? '';
+        const result = gameResults.find((r) => r.gameId === gameId);
+        const picks = Object.values(game.picks);
+        const correct = winner ? picks.filter((p) => p === winner).length : 0;
+        return {
+          gameId,
+          slots: getRoundPageMatchupSlots(gameId, bracketData, gameResults, gameWinners),
+          completed: !!winner,
+          winner,
+          loser: result?.loser ?? '',
+          winnerSeed: result?.winnerSeed ?? null,
+          loserSeed: result?.loserSeed ?? null,
+          correct,
+          total: picks.length,
+          accuracy: winner && picks.length ? (correct / picks.length) * 100 : 0,
+          distribution: game.stats.pick_distribution,
+        };
+      });
+  }, [bracketData, gameWinners, gameResults, roundGames]);
+
+  const completed = rows.filter((r) => r.completed);
+  const correctTotal = completed.reduce((s, r) => s + r.correct, 0);
+  const picksTotal = completed.reduce((s, r) => s + r.total, 0);
+  const roundAccuracy = picksTotal ? (correctTotal / picksTotal) * 100 : 0;
+
+  const byAccuracy = [...completed].sort((a, b) => b.accuracy - a.accuracy);
+  const topCount = Math.min(HIGHLIGHT_COUNT, Math.ceil(byAccuracy.length / 2));
+  const expected = byAccuracy.slice(0, topCount);
+  const surprising = byAccuracy.slice(topCount).reverse().slice(0, HIGHLIGHT_COUNT);
+
+  const distribution = useMemo(() => {
+    if (!bracketData) return [];
+    const done = rows.filter((r) => r.completed);
+    const perUser = new Map<string, number>();
+    done.forEach((r) => {
+      Object.entries(bracketData.games[r.gameId].picks).forEach(([u, p]) => {
+        perUser.set(u, (perUser.get(u) ?? 0) + (p === r.winner ? 1 : 0));
+      });
+    });
+    const counts = Array.from({ length: done.length + 1 }, () => 0);
+    perUser.forEach((n) => (counts[n] += 1));
+    return counts.map((users, correct) => ({ correct, users })).reverse();
+  }, [bracketData, rows]);
+  const maxUsers = Math.max(1, ...distribution.map((d) => d.users));
+
+  const sorted = useMemo(() => {
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (a.completed !== b.completed && sort.key !== 'game') return a.completed ? -1 : 1;
+      let diff = 0;
+      if (sort.key === 'game') diff = Number(a.gameId) - Number(b.gameId);
+      else if (sort.key === 'winner') diff = a.winner.localeCompare(b.winner);
+      else if (sort.key === 'correct') diff = a.correct - b.correct;
+      else diff = a.accuracy - b.accuracy;
+      return diff * dir || Number(a.gameId) - Number(b.gameId);
+    });
+  }, [rows, sort]);
+
+  const toggleSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'game' || key === 'winner' ? 'asc' : 'desc' }));
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', height: '300px', alignItems: 'center' }}>
-        <CircularProgress size={60} />
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 320 }}>
+        <CircularProgress />
       </Box>
     );
   }
-
   if (error || !bracketData) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 5, px: 3 }}>
-        <Typography variant="h2" color="error" gutterBottom>
-          Error
-        </Typography>
-        <Typography variant="body1" sx={{ mt: 2, mb: 4 }}>
-          {error || "Failed to load bracket data"}
-        </Typography>
-      </Box>
-    );
+    return <Typography color="error" sx={{ py: 8, textAlign: 'center' }}>{error || 'Failed to load bracket data'}</Typography>;
   }
-  
-  // Check which games have been completed
-  const completedGames = currentRoundGames.filter(gameId => 
-    gameWinners.some(winner => winner.gameId === gameId)
+
+  const matchupLabel = (r: GameRow) => (
+    <>
+      <TeamLink code={r.winner} seed={r.winnerSeed} yearPath={yearPath} />
+      <Box component="span" sx={{ color: tokens.subtle, mx: 1 }}>vs</Box>
+      <TeamLink code={r.loser} seed={r.loserSeed} yearPath={yearPath} />
+    </>
   );
-  
-  // Get game details for the round
-  const gameDetails = currentRoundGames.map(gameId => {
-    const game = bracketData.games[gameId];
-    if (!game) return null;
-    
-    const gameWinner = gameWinners.find(winner => winner.gameId === gameId);
-    const winnerTeam = gameWinner?.winner || '';
-    
-    const matchupSlots = getRoundPageMatchupSlots(gameId, bracketData, gameResults, gameWinners);
-    
-    // Get game result with loser
-    const gameResult = gameResults.find(result => result.gameId === gameId);
-    
-    // Calculate user accuracy for this game
-    let correctPicks = 0;
-    let totalPicks = 0;
-    let accuracy = 0;
-    
-    if (winnerTeam) {
-      correctPicks = Object.values(game.picks).filter(pick => pick === winnerTeam).length;
-      totalPicks = Object.values(game.picks).length;
-      accuracy = (correctPicks / totalPicks) * 100;
-    }
-    
-    return {
-      gameId,
-      matchupSlots,
-      completed: !!gameWinner,
-      winner: winnerTeam,
-      loser: gameResult?.loser || '',
-      winnerSeed: gameResult?.winnerSeed || null,
-      loserSeed: gameResult?.loserSeed || null,
-      correctPicks,
-      totalPicks,
-      accuracy,
-      pickDistribution: game.stats.pick_distribution
-    };
-  }).filter(Boolean);
-  
-  // Sort games by accuracy or by gameId
-  const sortedGames = [...gameDetails].sort((a, b) => 
-    sortByAccuracy 
-      ? b.accuracy - a.accuracy // Sort by accuracy (descending)
-      : parseInt(a.gameId) - parseInt(b.gameId) // Sort by game ID (ascending)
+
+  const highlightList = (title: string, items: GameRow[], color: string) => (
+    <Box>
+      <Typography sx={{ fontSize: '0.8rem', color: tokens.muted, mb: 1 }}>{title}</Typography>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 210px) 1fr 44px', alignItems: 'center', columnGap: 2, rowGap: 1 }}>
+        {items.map((r) => (
+          <Box key={r.gameId} sx={{ display: 'contents' }}>
+            <Link
+              component={RouterLink}
+              to={yearPath(`/games/${r.gameId}`)}
+              underline="hover"
+              color="inherit"
+              noWrap
+              sx={{ fontSize: '0.85rem', minWidth: 0 }}
+            >
+              <Box component="span" sx={{ color: tokens.muted, mr: 0.75 }}>{r.winnerSeed}</Box>
+              {r.winner}
+              <Box component="span" sx={{ color: tokens.muted }}> vs </Box>
+              <Box component="span" sx={{ color: tokens.muted, mr: 0.5 }}>{r.loserSeed}</Box>
+              {r.loser}
+            </Link>
+            <Meter value={r.accuracy} color={color} height={12} />
+            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, textAlign: 'right' }}>
+              {Math.round(r.accuracy)}%
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    </Box>
   );
-  
-  // Calculate average accuracy for this round
-  const roundStats = roundAccuracy[currentRoundId] || { accuracy: 0, correct: 0, total: 0 };
-  const avgAccuracy = roundStats.accuracy;
-  
-  const fullGameAccuracyLabels = sortedGames.map(game => {
-    const winner = game?.winner ? `${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}` : '';
-    const loser = game?.loser ? `${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}` : '';
-
-    if (winner && loser) {
-      return `${winner} vs ${loser}`;
-    }
-
-    const gameId = game?.gameId;
-    if (gameId) {
-      const gameResult = gameResults.find(r => r.gameId === gameId);
-      if (gameResult?.winner && gameResult?.loser) {
-        const winnerSeed = gameResult.winnerSeed ? ` (#${gameResult.winnerSeed})` : '';
-        const loserSeed = gameResult.loserSeed ? ` (#${gameResult.loserSeed})` : '';
-        return `${gameResult.winner}${winnerSeed} vs ${gameResult.loser}${loserSeed}`;
-      }
-    }
-
-    if (game?.matchupSlots) {
-      return `${formatMatchupSlotLabel(game.matchupSlots[0])} vs ${formatMatchupSlotLabel(game.matchupSlots[1])}`;
-    }
-
-    return `Game ${game?.gameId}`;
-  });
-
-  // Keep mobile labels short but meaningful
-  const shortGameAccuracyLabels = sortedGames.map(game => {
-    if (game?.completed && game.winner && game.loser) {
-      return `${game.winner} v ${game.loser}`;
-    }
-    if (game?.matchupSlots) {
-      const a = formatMatchupSlotLabel(game.matchupSlots[0]);
-      const b = formatMatchupSlotLabel(game.matchupSlots[1]);
-      return `${a} v ${b}`;
-    }
-
-    return game?.gameId != null ? `Game ${game.gameId}` : '';
-  });
-
-  // Format data for bar chart
-  const chartData = {
-    labels: isNarrowScreen ? shortGameAccuracyLabels : fullGameAccuracyLabels,
-    datasets: [
-      {
-        label: 'User Accuracy (%)',
-        data: sortedGames.map(game => game?.accuracy || 0),
-        backgroundColor: sortedGames.map(game =>
-          (game?.accuracy || 0) >= 50
-            ? theme.palette.success.light
-            : theme.palette.error.light
-        ),
-        borderColor: sortedGames.map(game =>
-          (game?.accuracy || 0) >= 50
-            ? theme.palette.success.main
-            : theme.palette.error.main
-        ),
-        borderWidth: 1,
-        ...(isNarrowScreen ? { maxBarThickness: 16 } : {}),
-      }
-    ],
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    indexAxis: (isNarrowScreen ? 'y' : 'x') as 'x' | 'y',
-    interaction: isNarrowScreen
-      ? { mode: 'index' as const, intersect: false }
-      : { mode: 'nearest' as const, intersect: true },
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: `${displayRoundName(currentRoundId)} Pick Accuracy`,
-      },
-      tooltip: {
-        callbacks: {
-          title: (items) => {
-            if (!items.length) return '';
-            const i = items[0].dataIndex;
-            return fullGameAccuracyLabels[i] ?? items[0].label;
-          },
-          label: function (context) {
-            const game = sortedGames[context.dataIndex];
-            return [
-              `Accuracy: ${game.accuracy.toFixed(1)}%`,
-              `Correct Picks: ${game.correctPicks}/${game.totalPicks}`
-            ];
-          }
-        }
-      }
-    },
-    scales: isNarrowScreen
-      ? {
-          x: {
-            beginAtZero: true,
-            max: 100,
-            title: {
-              display: true,
-              text: 'Accuracy (%)'
-            }
-          },
-          y: {
-            title: {
-              display: true,
-              text: 'Game'
-            },
-            ticks: {
-              autoSkip: false,
-              font: { size: 11 }
-            }
-          }
-        }
-      : {
-          y: {
-            beginAtZero: true,
-            max: 100,
-            title: {
-              display: true,
-              text: 'Accuracy (%)'
-            }
-          },
-          x: {
-            title: {
-              display: true,
-              text: 'Games'
-            },
-            ticks: {
-              maxRotation: 45,
-              minRotation: 0,
-              autoSkip: true
-            }
-          }
-        },
-    onClick: (_: unknown, elements: { index: number }[]) => {
-      if (elements && elements.length > 0) {
-        const clickedIndex = elements[0].index;
-        const gameId = sortedGames[clickedIndex].gameId;
-        setSelectedGame(gameId);
-      }
-    }
-  };
-  
-  // Calculate user accuracy distribution for this round
-  const accuracyDistribution = (() => {
-    if (!bracketData || !currentRoundGames || !gameResults) return null;
-    
-    // Map to store how many users got 0, 1, 2, ... games correct
-    const distribution: Record<number, number> = {};
-    // Map to track correct picks by user
-    const userCorrectPicks: Record<string, number> = {};
-    
-    // Initialize distribution
-    for (let i = 0; i <= currentRoundGames.length; i++) {
-      distribution[i] = 0;
-    }
-    
-    // Process each game in the round
-    currentRoundGames.forEach(gameId => {
-      const game = bracketData.games[gameId];
-      if (!game) return;
-      
-      const gameWinner = gameWinners.find(winner => winner.gameId === gameId);
-      if (!gameWinner || !gameWinner.winner) return; // Skip if game not completed
-      
-      // Check each user's pick for this game
-      Object.entries(game.picks).forEach(([username, pick]) => {
-        if (!userCorrectPicks[username]) {
-          userCorrectPicks[username] = 0;
-        }
-        
-        if (pick === gameWinner.winner) {
-          userCorrectPicks[username]++;
-        }
-      });
-    });
-    
-    // Populate distribution
-    Object.values(userCorrectPicks).forEach(correctCount => {
-      distribution[correctCount]++;
-    });
-    
-    return distribution;
-  })();
-  
-  // Create distribution chart data
-  const distributionChartData = (() => {
-    if (!accuracyDistribution) return null;
-    
-    const labels = Object.keys(accuracyDistribution);
-    const data = Object.values(accuracyDistribution);
-    
-    return {
-      labels,
-      datasets: [
-        {
-          label: 'Number of Users',
-          data,
-          backgroundColor: Array(labels.length).fill(theme.palette.primary.main),
-          borderColor: Array(labels.length).fill(theme.palette.primary.dark),
-          borderWidth: 1,
-        }
-      ]
-    };
-  })();
-  
-  const distributionChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: `Distribution of Correct Picks in ${displayRoundName(currentRoundId)}`,
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            const value = context.raw;
-            return `${value} user${value !== 1 ? 's' : ''}`;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Number of Users'
-        }
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Number of Correct Picks'
-        }
-      }
-    }
-  };
 
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        {displayRoundName(currentRoundId)} Analysis
-      </Typography>
-      
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="body1">Select Round:</Typography>
-        <Select 
-          value={currentRoundId}
-          onChange={(e) => navigate(yearPath(`/rounds/${e.target.value}`))}
-          size="small"
-          sx={{ minWidth: 120 }}
-        >
-          {Object.keys(ROUNDS).map(round => (
-            <MenuItem key={round} value={round}>{displayRoundName(round)}</MenuItem>
-          ))}
-        </Select>
-        
-        <FormControlLabel
-          control={
-            <Switch
-              checked={sortByAccuracy}
-              onChange={() => setSortByAccuracy(!sortByAccuracy)}
-              color="primary"
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 5fr) minmax(0, 6fr)' }, columnGap: 6, rowGap: 4, mb: 5 }}>
+        <Box>
+          <PageTitle>Round analysis</PageTitle>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: { xs: 3, lg: 6 } }}>
+            <Select
+              size="small"
+              value={round}
+              onChange={(e) => navigate(yearPath(`/rounds/${e.target.value}`))}
+              sx={{ minWidth: 160, fontWeight: 600, borderRadius: 2.5, '& .MuiSelect-select': { py: 1.1 } }}
+            >
+              {ROUND_ORDER.map((r) => (
+                <MenuItem key={r} value={r}>
+                  {ROUND_LABELS[r].long}
+                </MenuItem>
+              ))}
+            </Select>
+            <SegmentedControl
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'games', label: 'Game accuracy' },
+                { value: 'users', label: 'User distribution' },
+              ]}
             />
-          }
-          label={sortByAccuracy ? "Sorting by Accuracy" : "Sorting by Game Order"}
-        />
-      </Stack>
-      
-      <Grid container spacing={3}>
-        {/* Round Stats Summary */}
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardHeader title="Round Statistics" />
-            <CardContent>
-              <Stack spacing={2}>
-                <Box>
-                  <Typography variant="subtitle1">Average Accuracy</Typography>
-                  <Typography variant="h4">{avgAccuracy.toFixed(1)}%</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {roundStats.correct} correct picks out of {roundStats.total} total
-                  </Typography>
-                </Box>
-                
-                <Box>
-                  <Typography variant="subtitle1">Completed Games</Typography>
-                  <Typography variant="h4">
-                    {completedGames.length} / {currentRoundGames.length}
-                  </Typography>
-                </Box>
+          </Box>
+          <Box sx={{ display: 'flex' }}>
+            <Stat value={completed.length ? `${Math.round(roundAccuracy)}%` : '—'} label="Accuracy" detail={`${fmt(correctTotal)} / ${fmt(picksTotal)} correct picks`} />
+            <Stat value={fmt(correctTotal)} label="Correct picks" detail={`of ${fmt(picksTotal)} total`} />
+            <Stat value={String(completed.length)} label="Games completed" detail={`of ${rows.length} in this round`} />
+          </Box>
+        </Box>
 
-                <Box>
-                  <Typography variant="subtitle1">View Type</Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Button 
-                      variant={viewMode === 'game' ? "contained" : "outlined"}
-                      size="small"
-                      onClick={() => setViewMode('game')}
-                    >
-                      Game Accuracy
-                    </Button>
-                    <Button 
-                      variant={viewMode === 'user' ? "contained" : "outlined"}
-                      size="small"
-                      onClick={() => setViewMode('user')}
-                    >
-                      User Distribution
-                    </Button>
-                  </Stack>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        {/* Chart Area */}
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardHeader 
-              title={viewMode === 'game' ? "Game Pick Accuracy" : "User Accuracy Distribution"}
-              subheader={viewMode === 'game' ? "Click on a bar to see detailed pick distribution for that game" : "Distribution of correct picks per user"}
-            />
-            <CardContent>
-              <Box
-                sx={{
-                  width: '100%',
-                  height:
-                    viewMode === 'game'
-                      ? isNarrowScreen
-                        ? Math.min(90 + sortedGames.length * 20, 1100)
-                        : 400
-                      : 400
-                }}
-              >
-                {viewMode === 'game' ? (
-                  <Bar 
-                    data={chartData} 
-                    options={chartOptions} 
-                  />
-                ) : (
-                  distributionChartData ? (
-                    <Bar 
-                      data={distributionChartData} 
-                      options={distributionChartOptions} 
-                    />
-                  ) : (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                      <Typography variant="body1" color="text.secondary">
-                        No data available for this round
-                      </Typography>
+        <Box>
+          {view === 'games' ? (
+            <>
+              <Typography sx={{ fontWeight: 700, fontSize: '1.05rem', mb: 1.5 }}>
+                Game accuracy{' '}
+                <Box component="span" sx={{ fontWeight: 400, color: tokens.muted, fontSize: '0.9rem' }}>(share of brackets that picked the winner)</Box>
+              </Typography>
+              {completed.length === 0 ? (
+                <Typography sx={{ color: tokens.muted, py: 4 }}>No games in this round have been played yet.</Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                  {highlightList(`Top ${expected.length} most expected`, expected, '#22a35a')}
+                  {surprising.length > 0 && (
+                    <Box sx={{ pt: 2.5, borderTop: `1px solid ${tokens.border}` }}>
+                      {highlightList(`Bottom ${surprising.length} most surprising`, surprising, '#f08a8a')}
                     </Box>
-                  )
-                )}
-              </Box>
-              
-              {viewMode === 'user' && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
-                  This chart shows how many users correctly picked 0, 1, 2, etc. games in {displayRoundName(currentRoundId)}
-                </Typography>
+                  )}
+                </Box>
               )}
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        {/* Selected Game Details */}
-        {selectedGame && viewMode === 'game' && (
-          <Grid item xs={12}>
-            <Card>
-              <CardHeader 
-                title={`Game ${selectedGame} Pick Distribution`}
-                action={
-                  <Button
-                    size="small"
-                    component={RouterLink}
-                    to={yearPath(`/games/${selectedGame}`)}
-                  >
-                    View Game Page
-                  </Button>
-                }
-              />
-              <CardContent>
-                {(() => {
-                  const game = gameDetails.find(g => g.gameId === selectedGame);
-                  if (!game) return null;
-                  
-                  const totalPicks = Object.values(game.pickDistribution).reduce((sum, count) => sum + count, 0);
-                  
-                  return (
-                    <Grid container spacing={2}>
-                      {Object.entries(game.pickDistribution).map(([team, picks]) => {
-                        const percentage = (picks / totalPicks) * 100;
-                        const teamResult = game.winner === team ? "winner" : (game.loser === team ? "loser" : "");
-                        const seed = team === game.winner ? game.winnerSeed : (team === game.loser ? game.loserSeed : null);
-                        
-                        return (
-                          <Grid item xs={12} sm={6} key={team}>
-                            <Paper sx={{ p: 2 }}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                <Box>
-                                  <Stack direction="row" spacing={1} alignItems="center">
-                                    <Link component={RouterLink} to={yearPath(`/teams/${team}`)}>
-                                      <Typography variant="h6">{team}</Typography>
-                                    </Link>
-                                    {seed && (
-                                      <Chip label={`#${seed} Seed`} size="small" />
-                                    )}
-                                    {teamResult && (
-                                      <Chip 
-                                        label={teamResult === "winner" ? "Winner" : "Loser"} 
-                                        color={teamResult === "winner" ? "success" : "error"}
-                                        size="small"
-                                      />
-                                    )}
-                                  </Stack>
-                                  <Typography variant="body2">
-                                    {picks} picks ({percentage.toFixed(1)}%)
-                                  </Typography>
-                                </Box>
-                              </Stack>
-                            </Paper>
-                          </Grid>
-                        );
-                      })}
-                    </Grid>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-        
-        {/* List of Games */}
-        <Grid item xs={12}>
-          <Card>
-            <CardHeader title={`${displayRoundName(currentRoundId)} Games`} />
-            <CardContent>
-              {isNarrowScreen && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                  Swipe left/right to see more columns
-                </Typography>
+            </>
+          ) : (
+            <>
+              <Typography sx={{ fontWeight: 700, fontSize: '1.05rem', mb: 1.5 }}>
+                User distribution{' '}
+                <Box component="span" sx={{ fontWeight: 400, color: tokens.muted, fontSize: '0.9rem' }}>(brackets by games picked correctly)</Box>
+              </Typography>
+              {completed.length === 0 ? (
+                <Typography sx={{ color: tokens.muted, py: 4 }}>No games in this round have been played yet.</Typography>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: '90px 1fr 56px', alignItems: 'center', columnGap: 2, rowGap: 0.75 }}>
+                  {distribution.map((d) => (
+                    <Box key={d.correct} sx={{ display: 'contents' }}>
+                      <Typography sx={{ fontSize: '0.8rem', color: tokens.body, whiteSpace: 'nowrap' }}>
+                        {d.correct} of {completed.length}
+                      </Typography>
+                      <Meter value={(d.users / maxUsers) * 100} height={10} />
+                      <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, textAlign: 'right' }}>{fmt(d.users)}</Typography>
+                    </Box>
+                  ))}
+                </Box>
               )}
-              <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
-                <Table size="small" sx={{ minWidth: isNarrowScreen ? 760 : 'auto' }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Game</TableCell>
-                      <TableCell>Teams</TableCell>
-                      {isNarrowScreen && <TableCell align="right">Accuracy</TableCell>}
-                      <TableCell>Status</TableCell>
-                      <TableCell>Result</TableCell>
-                      <TableCell align="right">Correct Picks</TableCell>
-                      {!isNarrowScreen && <TableCell align="right">Accuracy</TableCell>}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sortedGames.map(game => {
-                      if (!game) return null;
-                      
-                      return (
-                        <TableRow key={game.gameId}>
-                          <TableCell>
-                            <Button
-                              size="small"
-                              color="primary"
-                              component={RouterLink}
-                              to={yearPath(`/games/${game.gameId}`)}
-                              sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 'auto' }}
-                            >
-                              Game {game.gameId}
-                            </Button>
-                          </TableCell>
-                          <TableCell>
-                            {game.completed ? (
-                              <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
-                                <Link
-                                  component={RouterLink}
-                                  to={yearPath(`/teams/${game.winner}`)}
-                                  underline="hover"
-                                  sx={matchupTableLinkSx}
-                                >
-                                  {game.winner}
-                                </Link>
-                                <Typography component="span" sx={matchupTableMutedSx}>
-                                  vs
-                                </Typography>
-                                <Link
-                                  component={RouterLink}
-                                  to={yearPath(`/teams/${game.loser}`)}
-                                  underline="hover"
-                                  sx={matchupTableLinkSx}
-                                >
-                                  {game.loser}
-                                </Link>
-                              </Stack>
-                            ) : game.matchupSlots ? (
-                              <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
-                                <MatchupSlotDisplay slot={game.matchupSlots[0]} yearPathFn={yearPath} />
-                                <Typography component="span" sx={matchupTableMutedSx}>
-                                  vs
-                                </Typography>
-                                <MatchupSlotDisplay slot={game.matchupSlots[1]} yearPathFn={yearPath} />
-                              </Stack>
-                            ) : (
-                              <Typography color="text.secondary">Game {game.gameId}</Typography>
-                            )}
-                          </TableCell>
-                          {isNarrowScreen && (
-                            <TableCell align="right">
-                              {game.completed ? `${game.accuracy.toFixed(1)}%` : '-'}
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <Chip 
-                              color={game.completed ? 'success' : 'warning'} 
-                              label={game.completed ? 'Completed' : 'Pending'} 
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {game.completed ? (
-                              <Stack direction="row" spacing={1}>
-                                <Chip 
-                                  color="success" 
-                                  label={`${game.winner}${game.winnerSeed ? ` (#${game.winnerSeed})` : ''}`} 
-                                  size="small"
-                                  component={RouterLink}
-                                  to={yearPath(`/teams/${game.winner}`)}
-                                  clickable
-                                />
-                                <Typography>beat</Typography>
-                                <Chip 
-                                  color="error" 
-                                  label={`${game.loser}${game.loserSeed ? ` (#${game.loserSeed})` : ''}`} 
-                                  size="small"
-                                  component={RouterLink}
-                                  to={yearPath(`/teams/${game.loser}`)}
-                                  clickable
-                                />
-                              </Stack>
-                            ) : (
-                              <Typography>-</Typography>
-                            )}
-                          </TableCell>
-                          <TableCell align="right">
-                            {game.completed ? `${game.correctPicks}/${game.totalPicks}` : '-'}
-                          </TableCell>
-                          {!isNarrowScreen && (
-                            <TableCell align="right">
-                              {game.completed ? `${game.accuracy.toFixed(1)}%` : '-'}
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+            </>
+          )}
+        </Box>
+      </Box>
+
+      <SectionHeading>Game details</SectionHeading>
+      <TableContainer sx={{ border: `1px solid ${tokens.border}`, borderRadius: 2.5, maxHeight: { md: 720 } }}>
+        <Table size="small" stickyHeader sx={{ minWidth: 640, '& td, & th': { py: 1.25 } }}>
+          <TableHead>
+            <TableRow sx={{ '& th': { bgcolor: tokens.surfaceAlt } }}>
+              <TableCell sortDirection={sort.key === 'game' ? sort.dir : false}>
+                <TableSortLabel active={sort.key === 'game'} direction={sort.dir} onClick={() => toggleSort('game')}>
+                  Matchup
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel active={sort.key === 'winner'} direction={sort.dir} onClick={() => toggleSort('winner')}>
+                  Winner
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="right">
+                <TableSortLabel active={sort.key === 'correct'} direction={sort.dir} onClick={() => toggleSort('correct')}>
+                  Correct picks
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="right">
+                <TableSortLabel active={sort.key === 'accuracy'} direction={sort.dir} onClick={() => toggleSort('accuracy')}>
+                  Accuracy
+                </TableSortLabel>
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sorted.map((r) => {
+              const pending = Object.entries(r.distribution).sort((a, b) => b[1] - a[1]);
+              const pendingTotal = pending.reduce((s, [, n]) => s + n, 0) || 1;
+              return (
+                <TableRow key={r.gameId} hover>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
+                      <Link component={RouterLink} to={yearPath(`/games/${r.gameId}`)} underline="hover" sx={{ fontSize: '0.75rem', color: tokens.muted, minWidth: 28 }}>
+                        G{r.gameId}
+                      </Link>
+                      <Box>
+                        {r.completed ? (
+                          matchupLabel(r)
+                        ) : r.slots ? (
+                          <>
+                            <Slot slot={r.slots[0]} yearPath={yearPath} />
+                            <Box component="span" sx={{ color: tokens.subtle, mx: 1 }}>vs</Box>
+                            <Slot slot={r.slots[1]} yearPath={yearPath} />
+                          </>
+                        ) : (
+                          `Game ${r.gameId}`
+                        )}
+                      </Box>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    {r.completed ? (
+                      <TeamLink code={r.winner} seed={r.winnerSeed} yearPath={yearPath} bold />
+                    ) : (
+                      <Typography sx={{ fontSize: '0.8rem', color: tokens.muted }}>
+                        Pending · most picked {pending[0]?.[0]} ({Math.round(((pending[0]?.[1] ?? 0) / pendingTotal) * 100)}%)
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell align="right" sx={{ color: tokens.body, whiteSpace: 'nowrap' }}>
+                    {r.completed ? `${fmt(r.correct)} / ${fmt(r.total)}` : '—'}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, color: !r.completed ? tokens.muted : r.accuracy >= 50 ? tokens.up : tokens.down }}>
+                    {r.completed ? `${Math.round(r.accuracy)}%` : '—'}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Box>
   );
 };
 
-export default RoundPage; 
+export default RoundPage;

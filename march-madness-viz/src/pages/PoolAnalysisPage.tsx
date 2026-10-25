@@ -27,6 +27,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useLocation } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import PageTitle from '../components/ui/PageTitle';
 import { Scatter } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -549,9 +550,7 @@ const PoolAnalysisPage = () => {
   
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Pool Analysis
-      </Typography>
+      <PageTitle subtitle="Find brackets like yours and see how the pool's pick strategies cluster.">Pool analysis</PageTitle>
       
       <Typography variant="body1" paragraph sx={{ mb: { xs: 2, sm: 3 } }}>
         Analyze pick strategies and bracket similarity.
