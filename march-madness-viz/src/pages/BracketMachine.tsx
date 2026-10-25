@@ -1,173 +1,195 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
   Box,
+  Button,
+  ButtonBase,
   CircularProgress,
-  Grid,
-  IconButton,
-  Paper,
-  Stack,
-  Typography
+  Drawer,
+  InputAdornment,
+  ListItemText,
+  Menu,
+  MenuItem,
+  TextField,
+  Typography,
 } from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SearchIcon from '@mui/icons-material/Search';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useData } from '../context/DataContext';
-import BracketRegion from '../components/bracket/BracketRegion';
-import BracketGame from '../components/bracket/BracketGame';
-import BracketControls from '../components/bracket/BracketControls';
-import BracketLeaderboard from '../components/bracket/BracketLeaderboard';
+import RegionBracket, { BracketColumn } from '../components/bracket/RegionBracket';
+import InitialsAvatar from '../components/ui/InitialsAvatar';
+import ChangeIndicator from '../components/ui/ChangeIndicator';
 import {
   getBracketRegions,
   getGameTeamsConsistent,
-  GameProbabilities,
   updatePredictedWinner as mergePredictedWinner,
-  updateGameProbability as applyGameProbability
 } from '../utils/bracketLogic';
-import {
-  calculateHypotheticalScores,
-  UserNameMapping
-} from '../utils/dataProcessing';
-import {
-  GameResult,
-  GameWinner,
-  UserScore
-} from '../types';
+import { calculateHypotheticalScores } from '../utils/dataProcessing';
+import { GameWinner } from '../types';
+import { useYearPath } from '../utils/yearRouting';
+import { displayNames } from '../hooks/usePoolStandings';
+import { MOBILE_NAV_HEIGHT, tokens } from '../theme';
 
-type MobileRoundKey =
-  | 'ROUND_64'
-  | 'ROUND_32'
-  | 'SWEET_16'
-  | 'ELITE_8'
-  | 'FINAL_FOUR'
-  | 'CHAMPIONSHIP';
+type RegionKey = 'SOUTH' | 'EAST' | 'WEST' | 'MIDWEST';
+type TabKey = RegionKey | 'FINAL_FOUR';
+type FillStrategy = 'favorites' | 'popular' | 'random';
 
-const MOBILE_ROUNDS: Array<{
-  key: MobileRoundKey;
-  label: string;
-  date: string;
-  points: string;
-}> = [
-  { key: 'ROUND_64', label: 'Round of 64', date: 'Mar 19-20', points: '10 pts' },
-  { key: 'ROUND_32', label: 'Round of 32', date: 'Mar 21-22', points: '20 pts' },
-  { key: 'SWEET_16', label: 'Sweet 16', date: 'Mar 26-27', points: '40 pts' },
-  { key: 'ELITE_8', label: 'Elite 8', date: 'Mar 28-29', points: '80 pts' },
-  { key: 'FINAL_FOUR', label: 'Final Four', date: 'Apr 4', points: '160 pts' },
-  { key: 'CHAMPIONSHIP', label: 'Championship', date: 'Apr 6', points: '320 pts' }
+/** Data keys don't match the displayed region names for this year's bracket. */
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'SOUTH', label: 'East' },
+  { key: 'EAST', label: 'West' },
+  { key: 'WEST', label: 'South' },
+  { key: 'MIDWEST', label: 'Midwest' },
+  { key: 'FINAL_FOUR', label: 'Final Four' },
 ];
-const AUTO_ADVANCED_BASE_ROUNDS: MobileRoundKey[] = ['ROUND_64', 'ROUND_32', 'SWEET_16', 'ELITE_8'];
 
-function buildCompetitionRanks(scores: UserScore[]): Map<string, number> {
-  const rankByUser = new Map<string, number>();
-  let currentRank = 1;
+const ROUND_META = {
+  round64: { label: 'Round of 64', date: 'Mar 19–20', points: '10 pts' },
+  round32: { label: 'Round of 32', date: 'Mar 21–22', points: '20 pts' },
+  sweet16: { label: 'Sweet 16', date: 'Mar 26–27', points: '40 pts' },
+  elite8: { label: 'Elite 8', date: 'Mar 28–29', points: '80 pts' },
+  finalFour: { label: 'Final Four', date: 'Apr 4', points: '160 pts' },
+  championship: { label: 'Championship', date: 'Apr 6', points: '320 pts' },
+};
 
-  for (let i = 0; i < scores.length; i += 1) {
-    if (i > 0 && scores[i].score < scores[i - 1].score) {
-      currentRank = i + 1;
-    }
-    rankByUser.set(scores[i].username, currentRank);
-  }
+const FILL_OPTIONS: Array<{ key: FillStrategy; label: string; hint: string }> = [
+  { key: 'favorites', label: 'Favorites', hint: 'Better seed wins every game' },
+  { key: 'popular', label: 'Pool favorites', hint: 'Team the pool picked more often wins' },
+  { key: 'random', label: 'Random', hint: 'Weighted by how often the pool picked each team' },
+];
 
-  return rankByUser;
+const ALL_GAME_IDS = Array.from({ length: 63 }, (_, i) => String(i + 1));
+const STANDINGS_PAGE = 50;
+
+interface ScenarioRow {
+  username: string;
+  fullName: string;
+  bracketName: string;
+  score: number;
+  current: number;
+  rank: number;
+  rankChange: number;
 }
 
-function buildTeamSeedMap(gameResults: GameResult[]): Record<string, number> {
-  const map: Record<string, number> = {};
-  for (const r of gameResults) {
-    map[r.winner] = r.winnerSeed;
-    map[r.loser] = r.loserSeed;
-  }
-  return map;
-}
-
-function enrichScores(
-  scores: UserScore[],
-  bracketNameByUser: Record<string, string | undefined>,
-  fullNameByUser: Record<string, string | undefined>
-): UserScore[] {
-  return scores.map((s) => {
-    const bracketFromMap = bracketNameByUser[s.username];
-    const fullNameFromMap = fullNameByUser[s.username];
-    return {
-      ...s,
-      bracketName:
-        bracketFromMap !== undefined && bracketFromMap !== ''
-          ? bracketFromMap
-          : s.bracketName,
-      fullName:
-        fullNameFromMap !== undefined && fullNameFromMap !== ''
-          ? fullNameFromMap
-          : s.fullName
-    };
+function competitionRanks(rows: Array<{ username: string; score: number }>): Map<string, number> {
+  const sorted = [...rows].sort((a, b) => b.score - a.score);
+  const ranks = new Map<string, number>();
+  sorted.forEach((row, i) => {
+    const prev = sorted[i - 1];
+    ranks.set(row.username, prev && prev.score === row.score ? ranks.get(prev.username)! : i + 1);
   });
+  return ranks;
 }
+
+const ScenarioStandings = ({ rows, hasPicks }: { rows: ScenarioRow[]; hasPicks: boolean }) => {
+  const { yearPath } = useYearPath();
+  const [search, setSearch] = useState('');
+  const [visible, setVisible] = useState(STANDINGS_PAGE);
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? rows.filter((r) => r.fullName.toLowerCase().includes(q) || r.bracketName.toLowerCase().includes(q) || r.username.toLowerCase().includes(q))
+    : rows;
+
+  return (
+    <Box>
+      <TextField
+        fullWidth
+        size="small"
+        placeholder="Search people or brackets"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setVisible(STANDINGS_PAGE);
+        }}
+        sx={{ mb: 1, '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon sx={{ color: tokens.subtle }} />
+            </InputAdornment>
+          ),
+        }}
+      />
+      {filtered.slice(0, visible).map((r) => (
+        <Box
+          key={r.username}
+          component={RouterLink}
+          to={yearPath(`/users/${encodeURIComponent(r.username)}`)}
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: '28px 32px minmax(0,1fr) auto',
+            alignItems: 'center',
+            columnGap: 1.25,
+            py: 1.1,
+            borderBottom: `1px solid ${tokens.divider}`,
+            color: 'inherit',
+            textDecoration: 'none',
+            '&:hover': { bgcolor: tokens.surfaceAlt },
+          }}
+        >
+          <Typography sx={{ fontWeight: 700, textAlign: 'center', fontSize: '0.9rem' }}>{r.rank}</Typography>
+          <InitialsAvatar name={r.fullName} seed={r.username} size={32} highlight={r.rank === 1} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography noWrap sx={{ fontWeight: 600, fontSize: '0.875rem' }}>{r.fullName}</Typography>
+            <Typography noWrap sx={{ color: tokens.muted, fontSize: '0.75rem' }}>{r.bracketName}</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{r.score.toLocaleString()}</Typography>
+            <Box sx={{ minHeight: 18 }}>
+              {hasPicks && r.rankChange !== 0 && (
+                <ChangeIndicator value={r.rankChange} label={String(Math.abs(r.rankChange))} fontSize="0.75rem" />
+              )}
+            </Box>
+          </Box>
+        </Box>
+      ))}
+      {filtered.length > visible && (
+        <Box sx={{ textAlign: 'center', mt: 2 }}>
+          <Button size="small" variant="outlined" onClick={() => setVisible((v) => v + STANDINGS_PAGE)}>
+            Show more
+          </Button>
+        </Box>
+      )}
+      {filtered.length === 0 && (
+        <Typography sx={{ color: tokens.muted, fontSize: '0.875rem', textAlign: 'center', py: 3 }}>No matches.</Typography>
+      )}
+    </Box>
+  );
+};
 
 function BracketMachine() {
-  const {
-    bracketData,
-    gameWinners,
-    gameResults,
-    userNameMapping,
-    loading,
-    error
-  } = useData();
+  const { bracketData, gameWinners, gameResults, userNameMapping, loading, error } = useData();
+  const [tab, setTab] = useState<TabKey>('SOUTH');
+  const [predicted, setPredicted] = useState<GameWinner[]>([]);
+  const [standingsOpen, setStandingsOpen] = useState(false);
+  const [fillAnchor, setFillAnchor] = useState<HTMLElement | null>(null);
 
-  const [predictedWinners, setPredictedWinners] = useState([] as GameWinner[]);
-  const [gameProbabilities, setGameProbabilities] = useState({} as GameProbabilities);
-  const [mobileRoundIndex, setMobileRoundIndex] = useState(4);
-  const [touchStartX, setTouchStartX] = useState(null as number | null);
-  const [mobileSlideDirection, setMobileSlideDirection] = useState('next' as 'next' | 'prev');
-  const [autoAdvancedRounds, setAutoAdvancedRounds] = useState(
-    new Set(AUTO_ADVANCED_BASE_ROUNDS) as Set<MobileRoundKey>
-  );
+  const regions = useMemo(() => getBracketRegions(), []);
 
-  const teamSeedMap = useMemo(() => buildTeamSeedMap(gameResults), [gameResults]);
-
-  const bracketNameByUser = useMemo(() => {
-    const m: Record<string, string | undefined> = {};
-    (Object.keys(userNameMapping) as string[]).forEach((u) => {
-      const row: UserNameMapping | undefined = userNameMapping[u];
-      m[u] = row?.bracketName;
+  const seedByTeam = useMemo(() => {
+    const map: Record<string, number> = {};
+    gameResults.forEach((r) => {
+      map[r.winner] = r.winnerSeed;
+      map[r.loser] = r.loserSeed;
     });
-    return m;
-  }, [userNameMapping]);
+    return map;
+  }, [gameResults]);
 
-  const fullNameByUser = useMemo(() => {
-    const m: Record<string, string | undefined> = {};
-    (Object.keys(userNameMapping) as string[]).forEach((u) => {
-      const row: UserNameMapping | undefined = userNameMapping[u];
-      m[u] = row?.fullName;
-    });
-    return m;
-  }, [userNameMapping]);
+  const actualByGame = useMemo(() => new Map(gameWinners.map((g) => [g.gameId, g.winner])), [gameWinners]);
+  const predictedByGame = useMemo(() => new Map(predicted.map((g) => [g.gameId, g.winner])), [predicted]);
 
-  const getGameTeams = useCallback(
-    (gameId: string) =>
-      bracketData
-        ? getGameTeamsConsistent(gameId, bracketData, gameResults, gameWinners, predictedWinners)
-        : [],
-    [bracketData, gameResults, gameWinners, predictedWinners]
+  const teamsFor = useCallback(
+    (gameId: string, picks: GameWinner[] = predicted) =>
+      bracketData ? getGameTeamsConsistent(gameId, bracketData, gameResults, gameWinners, picks) : [],
+    [bracketData, gameResults, gameWinners, predicted]
   );
 
-  const getTeamSeeds = useCallback(
-    (teams: string[]) => teams.map((t) => (t === 'TBD' ? '' : teamSeedMap[t] ?? '')),
-    [teamSeedMap]
-  );
-
-  const getActualWinner = useCallback(
-    (gameId: string) => gameWinners.find((w: GameWinner) => w.gameId === gameId)?.winner || '',
-    [gameWinners]
-  );
-
-  const getPredictedWinner = useCallback(
-    (gameId: string) => predictedWinners.find((w: GameWinner) => w.gameId === gameId)?.winner || '',
-    [predictedWinners]
-  );
-
-  const handlePredictedWinner = useCallback(
-    (gameId: string, winner: string) => {
+  const handlePick = useCallback(
+    (gameId: string, team: string) => {
       if (!bracketData) return;
-      setPredictedWinners((prev: GameWinner[]) =>
-        mergePredictedWinner(gameId, winner, prev, (gid, pending) =>
+      setPredicted((prev) =>
+        mergePredictedWinner(gameId, team, prev, (gid, pending) =>
           getGameTeamsConsistent(gid, bracketData, gameResults, gameWinners, pending)
         )
       );
@@ -175,195 +197,56 @@ function BracketMachine() {
     [bracketData, gameResults, gameWinners]
   );
 
-  const handleGameProbability = useCallback(
-    (gameId: string, team: string, probability: number) => {
-      setGameProbabilities((prev: GameProbabilities) =>
-        applyGameProbability(gameId, team, probability, prev, getGameTeams)
-      );
-    },
-    [getGameTeams]
-  );
+  const autoFill = (strategy: FillStrategy) => {
+    if (!bracketData) return;
+    const picks = [...predicted];
+    const picked = new Set(picks.map((p) => p.gameId));
+    for (const gameId of ALL_GAME_IDS) {
+      if (actualByGame.has(gameId) || picked.has(gameId)) continue;
+      const teams = getGameTeamsConsistent(gameId, bracketData, gameResults, gameWinners, picks);
+      if (teams.length !== 2 || teams.includes('TBD')) continue;
+      const [a, b] = teams;
+      const dist = bracketData.games[gameId]?.stats.pick_distribution ?? {};
+      const pa = dist[a] ?? 0;
+      const pb = dist[b] ?? 0;
+      let winner: string;
+      if (strategy === 'favorites') {
+        const sa = seedByTeam[a] ?? 99;
+        const sb = seedByTeam[b] ?? 99;
+        winner = sa === sb ? (pa >= pb ? a : b) : sa < sb ? a : b;
+      } else if (strategy === 'popular') {
+        winner = pa >= pb ? a : b;
+      } else {
+        const share = pa + pb > 0 ? pa / (pa + pb) : 0.5;
+        winner = Math.random() < share ? a : b;
+      }
+      picks.push({ gameId, winner });
+    }
+    setPredicted(picks);
+    setFillAnchor(null);
+  };
 
-  const resetPredictions = useCallback(() => {
-    setPredictedWinners([]);
-    setGameProbabilities({});
-    setMobileRoundIndex(4);
-    setAutoAdvancedRounds(new Set(AUTO_ADVANCED_BASE_ROUNDS) as Set<MobileRoundKey>);
-  }, []);
-
-  const baselineScores = useMemo(() => {
+  const rows = useMemo<ScenarioRow[]>(() => {
     if (!bracketData) return [];
-    return enrichScores(
-      calculateHypotheticalScores(bracketData, gameWinners, []),
-      bracketNameByUser,
-      fullNameByUser
-    );
-  }, [bracketData, gameWinners, bracketNameByUser, fullNameByUser]);
-
-  const scenarioScores = useMemo(() => {
-    if (!bracketData) return [];
-    return enrichScores(
-      calculateHypotheticalScores(bracketData, gameWinners, predictedWinners),
-      bracketNameByUser,
-      fullNameByUser
-    );
-  }, [bracketData, gameWinners, predictedWinners, bracketNameByUser, fullNameByUser]);
-
-  const currentScoreByUser = useMemo(
-    () =>
-      baselineScores.reduce((acc: Record<string, number>, row: UserScore) => {
-        acc[row.username] = row.score;
-        return acc;
-      }, {}),
-    [baselineScores]
-  );
-  const rankDeltaByUser = useMemo(() => {
-    const baseRank = buildCompetitionRanks(baselineScores);
-    const scenRank = buildCompetitionRanks(scenarioScores);
-    return scenarioScores.reduce((acc: Record<string, number>, u: UserScore) => {
-      const br = baseRank.get(u.username) ?? 999;
-      const sr = scenRank.get(u.username) ?? 999;
-      acc[u.username] = br - sr;
-      return acc;
-    }, {});
-  }, [baselineScores, scenarioScores]);
-
-  const regions = getBracketRegions();
-  const finalFour = regions.FINAL_FOUR;
-  const regionLayout = {
-    topLeft: { key: 'SOUTH', title: 'East', isRightSide: false },
-    topRight: { key: 'EAST', title: 'West', isRightSide: true },
-    bottomLeft: { key: 'WEST', title: 'South', isRightSide: false },
-    bottomRight: { key: 'MIDWEST', title: 'Midwest', isRightSide: true }
-  } as const;
-
-  const regionProps = {
-    getGameTeams,
-    getTeamSeeds,
-    getPredictedWinner,
-    getActualWinner,
-    probabilityMode: false,
-    gameProbabilities,
-    updatePredictedWinner: handlePredictedWinner,
-    updateGameProbability: handleGameProbability
-  };
-
-  const mobileRound = MOBILE_ROUNDS[mobileRoundIndex];
-
-  const regionKeyOrder = [
-    regionLayout.topLeft.key,
-    regionLayout.topRight.key,
-    regionLayout.bottomLeft.key,
-    regionLayout.bottomRight.key
-  ] as const;
-  const regionTitleByKey: Record<string, string> = {
-    [regionLayout.topLeft.key]: regionLayout.topLeft.title,
-    [regionLayout.topRight.key]: regionLayout.topRight.title,
-    [regionLayout.bottomLeft.key]: regionLayout.bottomLeft.title,
-    [regionLayout.bottomRight.key]: regionLayout.bottomRight.title
-  };
-
-  const mobileRoundGroups = useMemo(() => {
-    if (mobileRound.key === 'FINAL_FOUR') {
-      return [{ title: 'Final Four', gameIds: finalFour.games }];
-    }
-    if (mobileRound.key === 'CHAMPIONSHIP') {
-      return [{ title: 'Championship', gameIds: finalFour.championship }];
-    }
-
-    const roundKeyMap: Record<'ROUND_64' | 'ROUND_32' | 'SWEET_16' | 'ELITE_8', 'round64' | 'round32' | 'sweet16' | 'elite8'> = {
-      ROUND_64: 'round64',
-      ROUND_32: 'round32',
-      SWEET_16: 'sweet16',
-      ELITE_8: 'elite8'
-    };
-    const k = roundKeyMap[mobileRound.key as 'ROUND_64' | 'ROUND_32' | 'SWEET_16' | 'ELITE_8'];
-    return regionKeyOrder.map((rk) => ({
-      title: `${regionTitleByKey[rk]} Region`,
-      gameIds: regions[rk][k]
-    }));
-  }, [mobileRound.key, finalFour.games, finalFour.championship, regionKeyOrder, regionTitleByKey, regions]);
-
-  const goMobilePrev = () => {
-    setMobileSlideDirection('prev');
-    setMobileRoundIndex((i: number) => Math.max(0, i - 1));
-  };
-  const goMobileNext = () => {
-    setMobileSlideDirection('next');
-    setMobileRoundIndex((i: number) => Math.min(MOBILE_ROUNDS.length - 1, i + 1));
-  };
-  const onMobileTouchStart = (x: number) => setTouchStartX(x);
-  const onMobileTouchEnd = (x: number) => {
-    if (touchStartX === null) return;
-    const delta = x - touchStartX;
-    if (Math.abs(delta) < 40) {
-      setTouchStartX(null);
-      return;
-    }
-    if (delta > 0) {
-      goMobilePrev();
-    } else {
-      goMobileNext();
-    }
-    setTouchStartX(null);
-  };
-
-  const getRoundGameIds = useCallback((roundKey: MobileRoundKey): string[] => {
-    if (roundKey === 'FINAL_FOUR') return finalFour.games;
-    if (roundKey === 'CHAMPIONSHIP') return finalFour.championship;
-    if (roundKey === 'ROUND_64') {
-      return [
-        ...regions[regionLayout.topLeft.key].round64,
-        ...regions[regionLayout.topRight.key].round64,
-        ...regions[regionLayout.bottomLeft.key].round64,
-        ...regions[regionLayout.bottomRight.key].round64
-      ];
-    }
-    if (roundKey === 'ROUND_32') {
-      return [
-        ...regions[regionLayout.topLeft.key].round32,
-        ...regions[regionLayout.topRight.key].round32,
-        ...regions[regionLayout.bottomLeft.key].round32,
-        ...regions[regionLayout.bottomRight.key].round32
-      ];
-    }
-    if (roundKey === 'SWEET_16') {
-      return [
-        ...regions[regionLayout.topLeft.key].sweet16,
-        ...regions[regionLayout.topRight.key].sweet16,
-        ...regions[regionLayout.bottomLeft.key].sweet16,
-        ...regions[regionLayout.bottomRight.key].sweet16
-      ];
-    }
-    return [
-      ...regions[regionLayout.topLeft.key].elite8,
-      ...regions[regionLayout.topRight.key].elite8,
-      ...regions[regionLayout.bottomLeft.key].elite8,
-      ...regions[regionLayout.bottomRight.key].elite8
-    ];
-  }, [finalFour.games, finalFour.championship, regions, regionLayout]);
-
-  useEffect(() => {
-    const currentRound = MOBILE_ROUNDS[mobileRoundIndex]?.key;
-    if (!currentRound || currentRound === 'CHAMPIONSHIP') return;
-    if (autoAdvancedRounds.has(currentRound)) return;
-
-    const actualWinnerByGame = new Map(gameWinners.map((g: GameWinner) => [g.gameId, g.winner]));
-    const predictedWinnerByGame = new Map(predictedWinners.map((g: GameWinner) => [g.gameId, g.winner]));
-    const gameIds = getRoundGameIds(currentRound);
-    const isRoundComplete = gameIds.every(
-      (gameId: string) => !!actualWinnerByGame.get(gameId) || !!predictedWinnerByGame.get(gameId)
-    );
-    if (!isRoundComplete) return;
-
-    setAutoAdvancedRounds((prev: Set<MobileRoundKey>) => {
-      const next = new Set(prev);
-      next.add(currentRound);
-      return next;
-    });
-    setMobileSlideDirection('next');
-    setMobileRoundIndex((idx: number) => Math.min(MOBILE_ROUNDS.length - 1, idx + 1));
-  }, [mobileRoundIndex, autoAdvancedRounds, gameWinners, predictedWinners, getRoundGameIds]);
+    const base = calculateHypotheticalScores(bracketData, gameWinners, []);
+    const scen = calculateHypotheticalScores(bracketData, gameWinners, predicted);
+    const baseRanks = competitionRanks(base);
+    const scenRanks = competitionRanks(scen);
+    const currentByUser = new Map(base.map((s) => [s.username, s.score]));
+    return scen
+      .map((s) => {
+        const rank = scenRanks.get(s.username)!;
+        return {
+          username: s.username,
+          ...displayNames(s.username, userNameMapping[s.username]),
+          score: s.score,
+          current: currentByUser.get(s.username) ?? 0,
+          rank,
+          rankChange: (baseRanks.get(s.username) ?? rank) - rank,
+        };
+      })
+      .sort((a, b) => a.rank - b.rank || a.fullName.localeCompare(b.fullName));
+  }, [bracketData, gameWinners, predicted, userNameMapping]);
 
   if (loading || error || !bracketData) {
     return (
@@ -373,301 +256,214 @@ function BracketMachine() {
     );
   }
 
+  const columns: BracketColumn[] =
+    tab === 'FINAL_FOUR'
+      ? [
+          { ...ROUND_META.finalFour, gameIds: regions.FINAL_FOUR.games },
+          { ...ROUND_META.championship, gameIds: regions.FINAL_FOUR.championship },
+        ]
+      : (['round64', 'round32', 'sweet16', 'elite8'] as const).map((k) => ({ ...ROUND_META[k], gameIds: regions[tab][k] }));
+
+  const tabLabel = TABS.find((t) => t.key === tab)!.label;
+  const remaining = ALL_GAME_IDS.filter((g) => !actualByGame.has(g)).length;
+  const picksMade = predicted.length;
+  const tournamentOver = remaining === 0;
+  const leader = rows[0];
+  const tiedLeaders = rows.filter((r) => r.rank === 1).length;
+
+  const summary = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, sm: 3 } }}>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ color: tokens.muted, fontSize: '0.8rem' }}>Picks made</Typography>
+        <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '1.6rem' }, lineHeight: 1.2 }}>
+          {picksMade}
+          <Box component="span" sx={{ color: tokens.muted, fontWeight: 500, fontSize: '0.9rem' }}> / {remaining}</Box>
+        </Typography>
+      </Box>
+      <Box sx={{ width: '1px', alignSelf: 'stretch', bgcolor: tokens.border }} />
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography sx={{ color: tokens.muted, fontSize: '0.8rem' }}>{picksMade ? 'Projected leader' : 'Current leader'}</Typography>
+        <Typography noWrap sx={{ fontWeight: 800, fontSize: { xs: '1.05rem', md: '1.1rem' }, lineHeight: 1.3 }}>
+          {leader ? leader.fullName : '—'}
+          {tiedLeaders > 1 && <Box component="span" sx={{ color: tokens.muted, fontWeight: 500 }}> +{tiedLeaders - 1}</Box>}
+        </Typography>
+        <Typography sx={{ color: tokens.muted, fontSize: '0.8rem' }}>{leader ? `${leader.score.toLocaleString()} pts` : ''}</Typography>
+      </Box>
+    </Box>
+  );
+
   return (
-    <Box sx={{ width: '100%' }}>
-      <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: 0.2 }} gutterBottom>
-        Bracket Machine
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 920 }}>
-        Explore bracket outcomes by tapping winners and immediately see how standings shift.
-      </Typography>
-
-      <Stack spacing={2.5}>
-        <BracketLeaderboard
-          userScores={scenarioScores}
-          probabilityMode={false}
-          title="Leaderboard"
-          maxHeight={230}
-          currentScoreByUser={currentScoreByUser}
-          rankDeltaByUser={rankDeltaByUser}
-          scoreLabel="Scenario"
-          showCurrentColumn={false}
-          showDeltaColumn={false}
-        />
-        <BracketControls
-          resetPredictions={resetPredictions}
-        />
-
-      <Grid container spacing={{ xs: 0, md: 2.5 }} sx={{ width: '100%', mx: 0 }}>
-        <Grid item xs={12}>
-          <Stack spacing={2.5}>
-            <Box
-              sx={{ display: { xs: 'block', md: 'none' } }}
-              onTouchStart={(e: any) => onMobileTouchStart(e.touches[0].clientX)}
-              onTouchEnd={(e: any) => onMobileTouchEnd(e.changedTouches[0].clientX)}
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 360px' },
+        columnGap: { lg: 5 },
+        alignItems: 'start',
+      }}
+    >
+      <Box sx={{ minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2 }}>
+          <Typography component="h1" sx={{ fontSize: { xs: '1.75rem', md: '2.6rem' }, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1 }}>
+            Bracket Machine
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0, '& .MuiButton-root': { whiteSpace: 'nowrap', minWidth: 0 } }}>
+            <Button
+              size="small"
+              startIcon={<AutoFixHighIcon />}
+              disabled={tournamentOver}
+              onClick={(e) => setFillAnchor(e.currentTarget)}
+              sx={{ '& .MuiButton-startIcon': { display: { xs: 'none', sm: 'inherit' } } }}
             >
-              <Box
-                key={`mobile-round-${mobileRoundIndex}`}
+              Auto-fill
+            </Button>
+            <Button size="small" disabled={!picksMade} onClick={() => setPredicted([])}>
+              Reset
+            </Button>
+          </Box>
+        </Box>
+
+        <Box
+          role="tablist"
+          sx={{
+            display: 'flex',
+            p: 0.5,
+            bgcolor: tokens.surfaceAlt,
+            borderRadius: 3,
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+            mb: 3,
+            maxWidth: 720,
+          }}
+        >
+          {TABS.map((t) => {
+            const active = t.key === tab;
+            return (
+              <ButtonBase
+                key={t.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t.key)}
                 sx={{
-                  animation: `${mobileSlideDirection === 'next' ? 'mobileSlideLeft' : 'mobileSlideRight'} 240ms cubic-bezier(0.22, 1, 0.36, 1)`,
-                  '@keyframes mobileSlideLeft': {
-                    from: { opacity: 0.7, transform: 'translateX(16px)' },
-                    to: { opacity: 1, transform: 'translateX(0)' }
-                  },
-                  '@keyframes mobileSlideRight': {
-                    from: { opacity: 0.7, transform: 'translateX(-16px)' },
-                    to: { opacity: 1, transform: 'translateX(0)' }
-                  }
+                  flex: '1 0 auto',
+                  px: { xs: 1.25, sm: 2 },
+                  py: 1.1,
+                  borderRadius: 2.5,
+                  fontSize: '0.95rem',
+                  fontWeight: active ? 600 : 500,
+                  whiteSpace: 'nowrap',
+                  color: active ? '#fff' : tokens.ink,
+                  bgcolor: active ? tokens.primary : 'transparent',
                 }}
               >
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 1.25,
-                    mb: 1.25,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'rgba(15, 23, 42, 0.10)',
-                    bgcolor: 'rgba(248, 250, 252, 0.7)'
-                  }}
-                >
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <IconButton size="small" onClick={goMobilePrev} disabled={mobileRoundIndex === 0}>
-                      <ChevronLeftIcon fontSize="small" />
-                    </IconButton>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                        {mobileRound.label}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        {mobileRound.date}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        {mobileRound.points}
-                      </Typography>
-                    </Box>
-                    <IconButton
-                      size="small"
-                      onClick={goMobileNext}
-                      disabled={mobileRoundIndex === MOBILE_ROUNDS.length - 1}
-                    >
-                      <ChevronRightIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                </Paper>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, px: 0.25 }}>
-                  Swipe left or right to move between rounds.
-                </Typography>
-                <Stack spacing={1.25}>
-                  {mobileRoundGroups.map((group: { title: string; gameIds: string[] }) => (
-                    <Paper
-                      key={group.title}
-                      elevation={0}
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: 'rgba(15, 23, 42, 0.10)'
-                      }}
-                    >
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                        {group.title}
-                      </Typography>
-                      <Stack spacing={1}>
-                        {group.gameIds.map((gameId: string) => (
-                          <BracketGame
-                            key={`mobile-${group.title}-${gameId}`}
-                            gameId={gameId}
-                            teams={getGameTeams(gameId)}
-                            seeds={getTeamSeeds(getGameTeams(gameId))}
-                            actualWinner={getActualWinner(gameId)}
-                            predictedWinner={getPredictedWinner(gameId)}
-                            probabilityMode={false}
-                            gameProbabilities={gameProbabilities}
-                            updatePredictedWinner={handlePredictedWinner}
-                            updateGameProbability={handleGameProbability}
-                          />
-                        ))}
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
-              </Box>
+                {t.label}
+              </ButtonBase>
+            );
+          })}
+        </Box>
+
+        <Typography component="h2" sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 800, letterSpacing: '-0.02em' }}>
+          {tab === 'FINAL_FOUR' ? 'Final Four' : `${tabLabel} Region`}
+        </Typography>
+        <Typography sx={{ color: tokens.muted, mb: 3 }}>
+          {tournamentOver
+            ? 'Every game has been played. Green shows the actual winners.'
+            : 'Tap a team to pick a winner. See how it changes the standings.'}
+        </Typography>
+
+        <RegionBracket
+          columns={columns}
+          getTeams={(id) => teamsFor(id)}
+          getSeed={(team) => seedByTeam[team]}
+          getActualWinner={(id) => actualByGame.get(id) ?? ''}
+          getPredictedWinner={(id) => predictedByGame.get(id) ?? ''}
+          onPick={handlePick}
+          championGameId={tab === 'FINAL_FOUR' ? '63' : undefined}
+        />
+
+        <Box sx={{ display: 'flex', gap: 2.5, mt: 2, color: tokens.muted, fontSize: '0.8rem', flexWrap: 'wrap' }}>
+          {[
+            { color: tokens.success, label: 'Actual result' },
+            { color: tokens.primary, label: 'Your pick' },
+          ].map((l) => (
+            <Box key={l.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: l.color }} />
+              {l.label}
             </Box>
+          ))}
+        </Box>
 
-            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 1.5,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'rgba(15, 23, 42, 0.10)',
-                bgcolor: 'rgba(248, 250, 252, 0.7)'
-              }}
-            >
-              <Grid container spacing={1} sx={{ px: 1 }}>
-                  <Grid item xs={6}>
-                    <Grid container>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Round of 64</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 19-20</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>10 pts</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Round of 32</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 21-22</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>20 pts</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Sweet 16</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 26-27</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>40 pts</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>Elite 8</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>Mar 28-29</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', lineHeight: 1.15 }}>80 pts</Typography>
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Grid container>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Elite 8</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 28-29</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>80 pts</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Sweet 16</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 26-27</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>40 pts</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Round of 32</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 21-22</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>20 pts</Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={3}>
-                        <Box sx={{ textAlign: 'center', minHeight: 42 }}>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700, lineHeight: 1.2 }}>Round of 64</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>Mar 19-20</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem', lineHeight: 1.15 }}>10 pts</Typography>
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </Grid>
-              </Grid>
-            </Paper>
-            <Grid container spacing={2}>
-              <BracketRegion
-                regionKey={regionLayout.topLeft.key}
-                title={regionLayout.topLeft.title}
-                isRightSide={regionLayout.topLeft.isRightSide}
-                regionData={regions[regionLayout.topLeft.key]}
-                {...regionProps}
-              />
-              <BracketRegion
-                regionKey={regionLayout.topRight.key}
-                title={regionLayout.topRight.title}
-                isRightSide={regionLayout.topRight.isRightSide}
-                regionData={regions[regionLayout.topRight.key]}
-                {...regionProps}
-              />
-            </Grid>
+        {/* Leaves room for the fixed scenario bar on mobile */}
+        <Box sx={{ display: { xs: 'block', lg: 'none' }, height: 120 }} />
+      </Box>
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'rgba(15, 23, 42, 0.10)',
-                boxShadow: '0 12px 28px rgba(15, 23, 42, 0.06)',
-                background:
-                  'radial-gradient(ellipse at top, rgba(0, 153, 255, 0.05) 0%, rgba(255, 255, 255, 1) 52%)'
-              }}
-            >
-              <Typography variant="h6" sx={{ fontWeight: 700 }} gutterBottom align="center">
-                {finalFour.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" align="center" sx={{ display: 'block', mb: 2 }}>
-                Apr 4 • 160 pts each semifinal
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" alignItems="stretch">
-                {finalFour.games.map((gameId) => (
-                  <Box key={gameId} sx={{ flex: 1, maxWidth: { sm: 260 }, mx: 'auto', width: '100%' }}>
-                    <BracketGame
-                      gameId={gameId}
-                      teams={getGameTeams(gameId)}
-                      seeds={getTeamSeeds(getGameTeams(gameId))}
-                      actualWinner={getActualWinner(gameId)}
-                      predictedWinner={getPredictedWinner(gameId)}
-                      probabilityMode={false}
-                      gameProbabilities={gameProbabilities}
-                      updatePredictedWinner={handlePredictedWinner}
-                      updateGameProbability={handleGameProbability}
-                    />
-                  </Box>
-                ))}
-              </Stack>
-              <Typography variant="caption" color="text.secondary" align="center" sx={{ display: 'block', mt: 1, fontWeight: 600 }}>
-                Championship • Apr 6 • 320 pts
-              </Typography>
-              <Box sx={{ maxWidth: 280, mx: 'auto', mt: 1 }}>
-                {finalFour.championship.map((gameId) => (
-                  <BracketGame
-                    key={gameId}
-                    gameId={gameId}
-                    teams={getGameTeams(gameId)}
-                    seeds={getTeamSeeds(getGameTeams(gameId))}
-                    actualWinner={getActualWinner(gameId)}
-                    predictedWinner={getPredictedWinner(gameId)}
-                    probabilityMode={false}
-                    gameProbabilities={gameProbabilities}
-                    updatePredictedWinner={handlePredictedWinner}
-                    updateGameProbability={handleGameProbability}
-                  />
-                ))}
-              </Box>
-            </Paper>
+      {/* Desktop sidebar */}
+      <Box
+        component="aside"
+        sx={{
+          display: { xs: 'none', lg: 'block' },
+          position: 'sticky',
+          top: 88,
+          pl: 4,
+          borderLeft: `1px solid ${tokens.border}`,
+          maxHeight: 'calc(100vh - 112px)',
+          overflowY: 'auto',
+        }}
+      >
+        <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', mb: 2 }}>Your scenario</Typography>
+        <Box sx={{ pb: 2, mb: 2, borderBottom: `1px solid ${tokens.border}` }}>{summary}</Box>
+        <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 1.5 }}>Scenario standings</Typography>
+        <ScenarioStandings rows={rows} hasPicks={picksMade > 0} />
+      </Box>
 
-            <Grid container spacing={2}>
-              <BracketRegion
-                regionKey={regionLayout.bottomLeft.key}
-                title={regionLayout.bottomLeft.title}
-                isRightSide={regionLayout.bottomLeft.isRightSide}
-                regionData={regions[regionLayout.bottomLeft.key]}
-                {...regionProps}
-              />
-              <BracketRegion
-                regionKey={regionLayout.bottomRight.key}
-                title={regionLayout.bottomRight.title}
-                isRightSide={regionLayout.bottomRight.isRightSide}
-                regionData={regions[regionLayout.bottomRight.key]}
-                {...regionProps}
-              />
-            </Grid>
-            </Box>
-          </Stack>
-        </Grid>
+      {/* Mobile scenario bar */}
+      <Box
+        sx={{
+          display: { xs: 'block', lg: 'none' },
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: { xs: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom))`, md: 0 },
+          zIndex: (t) => t.zIndex.appBar - 1,
+          bgcolor: tokens.surface,
+          borderTop: `1px solid ${tokens.border}`,
+          boxShadow: '0 -8px 24px rgba(15, 23, 42, 0.08)',
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          px: 2.5,
+          pt: 1,
+          pb: 1.75,
+        }}
+      >
+        <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: tokens.border, mx: 'auto', mb: 1.25 }} />
+        <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 0.75 }}>Your scenario</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>{summary}</Box>
+          <Button variant="contained" size="large" onClick={() => setStandingsOpen(true)} sx={{ whiteSpace: 'nowrap', px: 2.5, py: 1.4 }}>
+            Standings →
+          </Button>
+        </Box>
+      </Box>
 
-      </Grid>
-      </Stack>
+      <Drawer
+        anchor="bottom"
+        open={standingsOpen}
+        onClose={() => setStandingsOpen(false)}
+        PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '85vh', px: 2, pb: 'calc(16px + env(safe-area-inset-bottom))' } }}
+      >
+        <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: tokens.border, mx: 'auto', mt: 1.25, mb: 2 }} />
+        <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', mb: 1.5 }}>Scenario standings</Typography>
+        <ScenarioStandings rows={rows} hasPicks={picksMade > 0} />
+      </Drawer>
+
+      <Menu anchorEl={fillAnchor} open={!!fillAnchor} onClose={() => setFillAnchor(null)} PaperProps={{ variant: 'outlined', sx: { mt: 0.5 } }}>
+        <Typography sx={{ px: 2, py: 1, color: tokens.muted, fontSize: '0.8rem' }}>Fill remaining games with…</Typography>
+        {FILL_OPTIONS.map((o) => (
+          <MenuItem key={o.key} onClick={() => autoFill(o.key)}>
+            <ListItemText primary={o.label} secondary={o.hint} primaryTypographyProps={{ fontWeight: 600 }} />
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 }

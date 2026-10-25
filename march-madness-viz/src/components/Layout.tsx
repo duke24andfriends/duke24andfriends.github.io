@@ -25,6 +25,7 @@ import { useData } from '../context/DataContext';
 import { AVAILABLE_YEARS, getYearPath } from '../utils/yearRouting';
 import { getMostRecentRound } from '../utils/mostRecentRound';
 import { MOBILE_NAV_HEIGHT, tokens } from '../theme';
+import { displayNames } from '../hooks/usePoolStandings';
 
 interface NavItem {
   name: string;
@@ -102,11 +103,8 @@ const SearchDialog = ({
     const users = new Set<string>();
     Object.values(bracketData.games).forEach((g) => Object.keys(g.picks).forEach((u) => users.add(u)));
     return [...users]
-      .map((username) => ({
-        username,
-        fullName: userNameMapping[username]?.fullName || username,
-        bracketName: userNameMapping[username]?.bracketName || username,
-      }))
+      .filter(Boolean)
+      .map((username) => ({ username, ...displayNames(username, userNameMapping[username]) }))
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
   }, [bracketData, userNameMapping]);
 

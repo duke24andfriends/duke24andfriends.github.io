@@ -52,6 +52,15 @@ export interface PoolSummary {
   gamesPlayed: number;
 }
 
+const UNNAMED = 'Unnamed bracket';
+
+export function displayNames(username: string, mapping?: { fullName?: string; bracketName?: string }) {
+  return {
+    fullName: mapping?.fullName?.trim() || username || UNNAMED,
+    bracketName: mapping?.bracketName?.trim() || username || UNNAMED,
+  };
+}
+
 function competitionRanks(scores: Map<string, number>): Map<string, number> {
   const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
   const ranks = new Map<string, number>();
@@ -125,13 +134,11 @@ export function usePoolStandings(lookback = 1) {
           maxPossible += getPointsForGame(gameId);
         }
       });
-      const mapping = userNameMapping[u];
       const rank = currentRanks.get(u)!;
       const previousRank = previousRanks.get(u)!;
       return {
         username: u,
-        fullName: mapping?.fullName || u,
-        bracketName: mapping?.bracketName || u,
+        ...displayNames(u, userNameMapping[u]),
         score: running.get(u)!,
         maxPossible,
         rank,
